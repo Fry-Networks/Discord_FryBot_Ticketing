@@ -1,0 +1,26 @@
+{
+    "title": "💸 Tokenomics & Rewards",
+    "questions": [
+      {
+        "q": "What is FRY 2.0 and why is it important?",
+        "a": "FRY 2.0 is an updated token ecosystem for Fry Networks that segments the original FRY token into specialized tokens. This approach enhances functionality, rewards distribution, and monetization opportunities, fostering transparency and long-term stability."
+      },
+      {
+        "q": "What are the tokens in FRY 2.0 and their uses?",
+        "a": "FRY 2.0 introduces segmented tokens like fNODE, fVPN, etc., each aligned with specific network functions. This segmentation clarifies token purposes, enhances tokenomics, and improves monetization paths."
+      },
+      {
+        "q": "What is the reward structure for nodes?",
+        "a": "Monetized nodes earn fNode tokens, with rewards increasing based on verification and staking. A mandatory $50 USD registration stake ensures network reliability and incentivizes node participation."
+      },
+      {
+        "q": "How does the claim process work?",
+        "a": "Users can claim rewards manually. There are two options: Standard Claim, where you wait one month to receive full rewards, and Accelerated Claim, where you pay a 30% fee to receive rewards immediately."
+      },
+      {
+        "q": "What is verification staking?",
+        "a": "Verification staking ensures network reliability. Currently, only nodes are required to restake their verification stakes. Bandwidth miners will have this requirement in Q1 2025."
+      }
+    ]
+  }
+  

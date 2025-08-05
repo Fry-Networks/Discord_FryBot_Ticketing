@@ -1,0 +1,37 @@
+services:
+  discofrybot:
+    container_name: discofrybot
+    restart: unless-stopped
+    build:
+      context: ./discofrybot
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - frynet
+
+  fry-dashboard:
+    build:
+      context: ./discofrybot/fry-dashboard
+      dockerfile: Dockerfile
+    #ports:      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    networks:
+      - frynet
+  
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run fryticketsdash
+    volumes:
+      - /home/fryadmin/.cloudflared:/etc/cloudflared
+    networks:
+      - frynet
+    user: "1000:1000"
+      
+networks:
+  frynet:
+    driver: bridge

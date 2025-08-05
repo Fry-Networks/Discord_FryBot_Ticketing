@@ -1,0 +1,18 @@
+{
+    "title": "🎁 Unable to Claim Rewards",
+    "questions": [
+      {
+        "q": "Why can't I claim my rewards?",
+        "a": "There could be a few reasons why you’re unable to claim your rewards right now:\n\n1️⃣ **Wallet Setup:** Make sure you’ve opted in to both the fNode and Fry 2.0 tokens in your Algorand wallet. While opting in to Fry 2.0 is optional, doing so can unlock higher rewards through verification.\n\n2️⃣ **Node Status:** Your node must be online and actively sending Proof of Connectivity (PoC) transactions. If your node is offline or not submitting checks, you may not be eligible to claim rewards.\n\n3️⃣ **Network Delays:** Occasionally, there might be short delays or maintenance periods affecting reward claims. If everything is set up correctly but you still can’t claim, please wait a little while and try again.\n\nIf you’ve double-checked all these steps and are still having issues, feel free to reach out in our support channels—we’re here to help!"
+      },
+      {
+      "q": "Claim Error Initial Response Fix! 🚨",
+      "a": "If you're seeing an error when trying to claim rewards, try these quick fixes:\n\n1️⃣ Make sure your wallet has at least **10 ALGO** available (some claim actions require a balance for transaction fees).\n\n2️⃣ Go to your app or browser settings and **clear your cache**.\n\n3️⃣ In your Dashboard, open your **Reward History**.\n\n4️⃣ Try clicking **Claim Reward** one day at a time, instead of bulk-claiming.\n\n5️⃣ After doing this for 3-4 days, you should be able to go back to the main dashboard and claim your remaining rewards as usual—without running into errors!\n\nStill having trouble? Reach out in the support chat—we’re happy to help you get sorted."
+      },
+      {
+        "q": "What are the claim options?",
+        "a": "You can choose between Standard Claim, waiting one month to receive full rewards, or Accelerated Claim, paying a 30% fee to receive rewards immediately."
+      }
+    ]
+  }
+  

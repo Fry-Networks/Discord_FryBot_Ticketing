@@ -1,0 +1,14 @@
+{
+    "title": "🛠️ Node Setup & Monitoring",
+    "questions": [
+      {
+        "q": "How do I set up a Fry Node?",
+        "a": "To set up your Mini PC Node, follow these steps: Connect your Mini PC Node, power on and set up Windows, download and install the appropriate software for your node type (SDN, RDN, or SVN), and finalize registration by visiting the Fry Networks Dashboard."
+      },
+      {
+        "q": "How can I ensure my node is operational?",
+        "a": "After setting up your Fry Node, ensure it's functioning properly by opting into fNODE and Fry 2.0 tokens in your Algorand wallet, and checking for hourly Proof of Connectivity (PoC) transactions in your wallet."
+      }
+    ]
+  }
+  

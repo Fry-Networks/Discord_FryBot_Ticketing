@@ -1,0 +1,66 @@
+{
+    "category": "Fry Conversion",
+    "description": "Frequently asked questions about the FRY 1.0 to FRY 2.0/fNode conversion.",
+    "questions": [
+        {
+            "q": "Where does FRY 1.0 conversion happen?",
+            "a": "Only through the Fry Dashboard at dashboard.frynetworks.com. No other site or dApp is official."
+        },
+        {
+            "q": "When did conversion open?",
+            "a": "Started on August 1, 2025 at 00:00 UTC."
+        },
+        {
+            "q": "Who qualifies for conversion?",
+            "a": "Wallets holding FRY 1.0 as of December 1, 2024, 00:00 UTC snapshot."
+        },
+        {
+            "q": "Can I convert FRY 1.0 earned after the snapshot?",
+            "a": "No. Only snapshot balance qualifies. Post-snapshot rewards may convert later to tFRY, a transitional token (still in discussion through a FIP)."
+        },
+        {
+            "q": "What are the conversion rates?",
+            "a": "FRY 1.0 → FRY 2.0 at 80:1, or → fNODE at 40:1."
+        },
+        {
+            "q": "Can I split between FRY 2.0 and fNODE?",
+            "a": "No. You must convert your entire eligible balance in one transaction to either FRY 2.0 or fNODE."
+        },
+        {
+            "q": "Is any upgrade fee needed?",
+            "a": "No fee. No hardware upgrade needed; conversion is based solely on snapshot holdings."
+        },
+        {
+            "q": "How does vesting work?",
+            "a": "12-month linear vesting, starting August 1, 2025. Unlocks monthly. Must claim before month 13 closes."
+        },
+        {
+            "q": "What happens to FRY 1.0 sent for conversion?",
+            "a": "It is automatically burned via the dApp; do not send FRY manually."
+        },
+        {
+            "q": "Where can I track my conversion and vesting history?",
+            "a": "All conversion, claim, and vesting info is shown on your dashboard."
+        },
+        {
+            "q": "What is tFRY?",
+            "a": "A transitional token for rewards earned after snapshot."
+        },
+        {
+            "q": "What will miners earn after conversion opens?",
+            "a": "They continue earning FRY 1.0 and, eventually, tFRY or segment tokens when available."
+        },
+        {
+            "q": "What tokens exist in the new system?",
+            "a": "FRY 2.0 (governance) plus segment-specific tokens like fVPN, fGNSS, fRAD, fH2O, fAIR, fCAM, fDB, etc."
+        },
+        {
+            "q": "Are Fry 2.0 tokens mineable?",
+            "a": "No. FRY 2.0 is not mineable, it's a governance token. FRY 2.0 is an updated token ecosystem for Fry Networks that segments the original FRY token into specialized tokens. This approach enhances functionality, rewards distribution, and monetization opportunities, fostering transparency and long-term stability.\n\nFRY 2.0 (Governance Token):\nThe core token for governance in the Fry ecosystem, granting voting rights for network decisions and several other utilities like :\nTransaction fees on the NFT marketplace (fry.market).\nStaking platform fees (fry.farm).\nPurchasing BYOD (Bring Your Own Device) licenses."
+        },
+        {
+            "q": "How do I avoid scams?",
+            "a": "Only use the official dashboard and docs. Ignore any DMs offering help. Never send FRY 1.0 manually."
+        }
+    ]
+}

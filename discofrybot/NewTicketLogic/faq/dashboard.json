@@ -1,0 +1,15 @@
+{
+    "title": "🖥️ Dashboard Registration",
+    "questions": [
+      {
+        "q": "How do I register a new device on the dashboard?",
+        "a": "To register a new device, go to https://dashboard.frynetworks.com, click 'Connect Wallet' in the upper right corner, select and connect your wallet via the displayed QR code, and enter the required information into the text fields. Your PoC Wallet will be created automatically."
+      },
+      {
+        "q": "How do I add a new node or miner?",
+        "a": "On the dashboard, click 'Add', enter your miner key in the text box, and click 'Register'. Your email, first name, and last name will be pre-populated; update this information as needed."
+      }
+    ]
+  }
+  
+  

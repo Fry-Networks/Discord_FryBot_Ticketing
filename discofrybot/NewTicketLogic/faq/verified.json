@@ -1,0 +1,10 @@
+{
+    "title": "✅ Miner/Node Not Verified",
+    "questions": [
+      {
+        "q": "How do I verify my Fry Node?",
+        "a": "To verify your Fry Node, opt-in to fNODE and Fry 2.0 tokens in your Algorand wallet, and ensure your node is sending hourly Proof of Connectivity (PoC) transactions. If your node isn't verified, check your wallet for these transactions and consult the Fry Networks documentation for troubleshooting steps."
+      }
+    ]
+  }
+  

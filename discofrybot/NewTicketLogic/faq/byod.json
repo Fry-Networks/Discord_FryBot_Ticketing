@@ -1,0 +1,14 @@
+{
+    "title": "📦 BYOD (Bring Your Own Device)",
+    "questions": [
+      {
+        "q": "What is the BYOD program?",
+        "a": "The BYOD (Bring Your Own Device) program allows users to contribute to the Fry Networks ecosystem using their own hardware, such as personal computers, laptops, cameras, weather stations, and sensors. This provides flexibility, reduces hardware costs, and enables broader participation in the network."
+      },
+      {
+        "q": "How do I onboard my device?",
+        "a": "Follow these steps: set up an Algorand wallet, fund your wallet, opt-in to the Fry v2 token (ASA 2485314946), swap Algo for Fry tokens, and purchase a BYOD license for $105 USD (paid in Fry tokens). Then, set up your device according to the provided instructions."
+      }
+    ]
+  }
+  

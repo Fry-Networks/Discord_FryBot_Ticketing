@@ -1,0 +1,163 @@
+# ✅ Task Tracker – Discord Ticketing Rewrite
+
+## Active Tasks
+- [x] Scaffold new Discord bot structure (break out `ticketSystem.js`) - Completed 5/12/25
+- [x] Rewrite ticket panel and form logic using modular commands/components - Completed 5/12/25
+- [x] Enforce one-ticket-per-user rule across all categories - Completed 5/12/25
+- [x] Integrate form validation via shared schema (replacing old `validation.js`) - Completed 5/12/25
+- [x] Connect Supabase operations: insert `tickets`, `ticket_messages`, log to `staff_actions` - Completed 5/12/25
+- [x] Rewrite claim/unclaim logic with Supabase tracking:
+  - Set `claimed_by` and `claimed_by_username` in `tickets`
+  - Log action in `staff_actions`
+  - Prevent other staff from claiming an already claimed ticket
+- [x] Add “Close Ticket Now” logic with:
+  - Transcript prompt (DM/post/none)
+  - Mandatory transcript generation + upload
+- [x] Add “Schedule Close” logic with:
+  - 1m / 12h / 24h / 48h timers
+  - Transcript prompt
+  - Safe cancel + re-trigger logic
+- [x] Use Supabase `close_ticket` RPC when executing manual or scheduled ticket closures
+- [x] Handle category moves on schedule/cancel/close
+- [x] Auto-clean up UI buttons after use (cancel disappears, etc.)
+- [ ] **Implement Inactivity System:**
+    - **Database Schema:**
+        - [x] Add `last_message_at` column to `api.tickets` table.
+        - [x] Add `last_message_from_role` column to `api.tickets` table.
+        - [x] Add `inactivity_ping_count` column to `api.tickets` table.
+        - [x] Add `last_inactivity_ping_at` column to `api.tickets` table.
+        - [x] Add `staff_ping_count` column to `api.tickets` table.
+        - [x] Add `last_staff_ping_at` column to `api.tickets` table.
+    - **Configuration:**
+        - [x] Add `ticketAdminRoleId` to `config.js` and load from `.env`.
+    - **Data Backfill:**
+        - [x] Create and execute Supabase SQL script to backfill `last_message_at` and `last_message_from_role` for existing open tickets.
+    - **Code Modifications:**
+        - [x] Update `logTicketMessage` in `supabaseHandler.js` to update `last_message_at` and `last_message_from_role`.
+        - [x] Update `logTicketMessage` in `supabaseHandler.js` to reset inactivity counters.
+        - [x] Update `logTicketMessage` in `supabaseHandler.js` to reset staff inactivity counters.
+        - [x] Update `logTicketMessage` in `supabaseHandler.js` to conditionally update `last_message_at` and `last_message_from_role` based on sender role, and to not reset counters for bot messages.
+        - [x] Create `discofrybot/NewTicketLogic/modules/inactivityPinger.js` for ping logic.
+        - [x] Update `discofrybot/NewTicketLogic/modules/inactivityPinger.js` to include `pingUserForInactivity`, `pingModeratorForInactivity`, and `autoCloseInactiveTicket` functions.
+        - [x] Update `discofrybot/NewTicketLogic/modules/inactivityPinger.js` to handle two-stage staff pings.
+        - [x] Update `ticketSystem.js` to call the new `inactivityPinger` module and the `get_inactive_tickets` RPC.
+        - [x] Update `ticketSystem.js` to handle multi-stage pings and auto-closure logic.
+        - [x] Update `ticketSystem.js` to handle two-stage staff pings.
+        - [x] Update `ticketSystem.js` to treat 'bot' as `last_message_from_role` as 'user' for staff pinging.
+    - **Supabase RPC:**
+        - [x] Create `get_inactive_tickets` Supabase RPC function.
+    - **Inactivity System Features:**
+        - [ ] Implement configurable inactivity thresholds.
+        - [x] Implement multi-stage escalation for pings.
+        - [ ] Add customizable ping messages.
+        - [ ] Implement snooze/pause functionality for inactivity checks.
+        - [ ] Integrate inactivity status display into Fry Dashboard.
+        - [ ] Implement reporting for inactivity metrics.
+        - [ ] Introduce "On-Hold" ticket status.
+        - [x] Add user communication about inactivity policy.
+- [x] **Ticket Node Reward System:**
+    - **Database Schema:**
+        - [x] Create `fnode_rewards` table.
+        - [x] Create `reward_settings` table.
+        - [x] Enable RLS on `fnode_rewards` and `reward_settings` tables.
+        - [x] Create policies for `fnode_rewards` and `reward_settings` tables.
+        - [x] Add `UNIQUE` constraint on `staff_id` to `api.fnode_rewards` table.
+        - [x] Add `discord_user_id` column to `api.user_tokens` table.
+        - [x] Create `performance_thresholds` table with RLS.
+    - **Supabase RPC:**
+        - [x] Create `calculate_and_distribute_fnode_rewards` Supabase RPC function.
+        - [x] Create `api.trigger_calculate_fnode_rewards_edge_function` SQL function to call Edge Function.
+        - [x] Schedule `api.trigger_calculate_fnode_rewards_edge_function` to run daily via Supabase cron.
+        - [x] Create `api.set_performance_threshold` Supabase RPC function.
+        - [x] Create `api.get_performance_thresholds` Supabase RPC function.
+    - **Frontend:**
+        - [x] Create `get-fnode-rewards` API route.
+        - [x] Create `RewardsClient` component.
+        - [x] Add "Rewards" link to `NavBar` component.
+        - [x] Update `get-fnode-rewards` API route to use `serviceSupabase` and accept `user_id` query param.
+        - [x] Update `RewardsClient` to fetch `discord_user_id` from `user_tokens` and use it for `get-fnode-rewards` API call.
+        - [x] Update `store-discord-tokens` API route to store `discord_user_id` in `user_tokens`.
+        - [x] Implement authentication and staff role checks for `rewards/page.tsx`.
+        - [x] Implement authentication and staff role checks for `admin/rewards/page.tsx`.
+        - [x] Create `get-performance-thresholds` API route.
+        - [x] Create `set-performance-threshold` API route.
+        - [x] Integrate performance thresholds UI into `AdminRewardsClient.tsx`.
+    - **Admin Interface:**
+        - [x] Create admin interface to manage performance thresholds.
+        - [ ] Create admin interface to monitor helpdesk efficiency.
+        - [ ] Create admin interface to manually adjust rewards.
+        - [ ] Create admin interface to generate reports.
+    - **Notification System:**
+        - [ ] Create notification system to inform technicians of rewards.
+
+## Completed
+- [x] Supabase MCP server configured (read/write to `tickets`, `staff_actions`, etc.)
+- [x] `transcriptGenerator.js` and `driveUploader.js` functional and tested
+
+## Discovered During Work
+- Consider adding rate limiting for ticket creation attempts
+- Add logging for failed validation attempts
+
+## API Security Audit and Refactor - 7/30/2025
+
+### Summary
+Conducted a security audit and refactor of the API routes to address authentication and authorization vulnerabilities. The primary issue was the incorrect use of the Supabase server client in API routes, which prevented proper session handling and exposed several endpoints.
+
+### Changes Made
+1.  **Centralized Supabase Server Client:**
+    -   Updated `utils/supabase/server.ts` to export a single, correctly configured `async` function `createClient()` for server-side Supabase interactions.
+    -   This new client properly handles cookies for authentication in Next.js Server Components, API Routes, and other server-side contexts.
+
+2.  **API Route Refactoring:**
+    -   Refactored the following API routes to use the new centralized `createClient` function and a consistent authorization pattern:
+        -   `admin/performance-thresholds/route.ts`
+        -   `get-all-fnode-rewards/route.ts`
+        -   `get-reward-settings/route.ts`
+        -   `get-fnode-rewards/route.ts`
+        -   `analytics/route.ts`
+    -   Implemented a centralized `authorize` function in each of these routes to check for a valid user session and staff role before allowing access.
+    -   Added specific checks for the `admin_users` table in the `performance-thresholds` route to ensure only authorized admins can access it.
+
+3.  **Page Component Updates:**
+    -   Updated `(dashboard)/rewards/page.tsx` and `(dashboard)/admin/rewards/page.tsx` to correctly `await` the `createClient` function, resolving errors caused by the new `async` implementation.
+
+4.  **TypeScript and Type Safety:**
+    -   Corrected `SupabaseClient` type annotations in the refactored API routes to use the `Database` type from `types/supabase.ts`, improving type safety.
+    -   Resolved a TypeScript error in `store-discord-tokens/route.ts` related to the `createClient` function's generic type.
+
+### Outcome
+-   All relevant API routes are now protected by authentication and authorization checks.
+-   The Supabase server client is now used correctly and consistently across the application.
+-   The codebase is cleaner, more maintainable, and more secure.
+
+## Fry Conversion Issues Ticket Type Integration - 8/1/2025
+
+### Summary
+Implemented a new ticket type "Fry Conversion Issues" with an automated workflow to assist users with FRY 1.0 to FRY 2.0/fNode conversion problems. This includes a custom welcome message and an eligibility check based on Algorand address.
+
+### Changes Made
+1.  **`discofrybot/NewTicketLogic/utils/config.js`**:
+    *   Added `fry_conversion_issues` to the `categoryIds` object, linking it to the `TICKET_CAT_FRY_CONVERSION` environment variable.
+2.  **`discofrybot/NewTicketLogic/utils/formValidator.js`**:
+    *   Defined the form fields for `fry_conversion_issues` to include `contact_info`, `algorand_address`, `minerkeys`, and `description`.
+3.  **`discofrybot/NewTicketLogic/handlers/interactionHandler.js`**:
+    *   Added "Fry Conversion Issues" as a new option in the ticket creation panel's dropdown menu.
+    *   Implemented a user-facing "Check Eligibility" button that appears in all ticket types. When clicked, it prompts the user for an Algorand address via a modal.
+    *   The modal submission triggers an eligibility check, and the detailed results are posted publicly in the ticket channel.
+4.  **Supabase Table `api.conversion_eligibility`**:
+    *   Created a new table with columns `address`, `fry_1_0_held`, `fry_1_0_staked_verification`, `fry_1_0_staked_cometa`, `fry_1_0_eq_of_lp_cometa`, `fry_1_0_eq_of_lp_tinyman`, and `total_fry_1_0_available` to store detailed eligibility data.
+    *   Enabled Row Level Security (RLS) and added a service role policy for secure access.
+5.  **`discofrybot/NewTicketLogic/handlers/supabaseHandler.js`**:
+    *   Updated the `checkConversionEligibility` function to query the new `api.conversion_eligibility` table and return detailed eligibility information.
+6.  **`discofrybot/NewTicketLogic/faq/conversion.json`**:
+    *   Created an empty JSON file to serve as the base for "Fry Conversion" FAQ content. This content will be populated in a separate task.
+7.  **`discofrybot/NewTicketLogic/modules/faqHandler.js`**:
+    *   Updated to include the new "Fry Conversion" FAQ category in the FAQ selection menu.
+8.  **`discofrybot/NewTicketLogic/handlers/ticketCreationHandler.js`**:
+    *   Implemented a custom welcome message for `fry_conversion_issues` tickets. This message pings the user, provides key conversion details (snapshot date, conversion options, vesting schedule), and directs them to the FAQs.
+    *   Integrated the automated eligibility check, which calls `supabaseHandler.checkConversionEligibility` and posts the detailed eligibility result in the ticket channel.
+    *   Added the "Check My Eligibility" button to the initial welcome message for all ticket types.
+
+The system is now fully updated to handle "Fry Conversion Issues" tickets with the specified automated workflow, detailed eligibility checks, and a user-facing eligibility check button.
+
+I have also updated the `TASK.md` file with a detailed summary of all the changes made during this task.
