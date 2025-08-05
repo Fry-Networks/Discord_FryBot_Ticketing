@@ -1,0 +1,108 @@
+# ─────────────────────────────────────
+# 🔁 Node.js / NPM (any subfolder)
+# ─────────────────────────────────────
+**/node_modules/
+**/npm-debug.log*
+**/package-lock.json
+.pnpm-debug.log*
+
+# ─────────────────────────────────────
+# 🌍 Environment Variables
+# ─────────────────────────────────────
+**/.env
+**/.env.*.local
+**/.env.local
+**/.env.development.local
+**/.env.production.local
+**/.env.test.local
+
+# ─────────────────────────────────────
+# 🛠️ Build Outputs
+# ─────────────────────────────────────
+**/dist/
+**/build/
+**/.next/
+**/.cache/
+**/.turbo/
+.next/
+out/
+
+# ─────────────────────────────────────
+# 🐳 Docker
+# ─────────────────────────────────────
+*.pid
+*.sock
+docker-compose.override.yml
+docker-compose.dev.yml
+**/.docker/
+**/Dockerfile.local
+
+# ─────────────────────────────────────
+# 🧪 Testing
+# ─────────────────────────────────────
+coverage/
+.nyc_output/
+jest-coverage/
+**/__tests__/output/
+**/*.testlog
+
+# ─────────────────────────────────────
+# 🧾 Logs / Generated Output
+# ─────────────────────────────────────
+logs/
+*.log
+*.csv
+*.sqlite
+cron.log
+debug.log
+**/transcripts/
+**/*.txt
+**/*.pdf
+**/*.out
+**/*.sig
+
+# ─────────────────────────────────────
+# 🧪 Supabase
+# ─────────────────────────────────────
+.supabase/
+supabase/.temp/
+supabase/migrations/dev/
+
+# ─────────────────────────────────────
+# 🧠 AI Agents / Tooling
+# ─────────────────────────────────────
+.cline/
+.mcp/
+**/scripts/tmp/
+**/scripts/output/
+
+# ─────────────────────────────────────
+# 🧠 IDEs / Editors / OS
+# ─────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ─────────────────────────────────────
+# 🔐 Security
+# ─────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+private.key
+public.key
+id_rsa
+id_rsa.pub
+
+# ─────────────────────────────────────
+# 🧳 Archives / Temp
+# ─────────────────────────────────────
+*.tgz
+*.zip
+*.bak
+*.swp
+*.tmp
+*.ol*
