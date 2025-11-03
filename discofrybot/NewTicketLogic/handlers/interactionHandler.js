@@ -22,6 +22,7 @@ const { handleWaiveRegistrationButton, handleWaiveRegistrationConfirmation } = r
 const issueCouponHandler = require('./issueCouponHandler'); // Import the new issue coupon handler
 const { handleConfirmSnPicture, handleConfirmFactoryResetPicture } = require('./confirmPicturesReturn'); // Import the new picture confirmation handler
 const {sendNodeForgoReturnInstructions} = require('./nodeForgoReturnHandler'); // Import the new node forgo/return handler
+const flxtimePartnersHandler = require('./flxtimePartnersHandler'); // Import the new Flxtime Partners handler
 let discordClient; // Declare module-level variable to store the client
 
 // Define approved and disallowed regions for returns
@@ -120,7 +121,8 @@ async function handleSlashCommand(interaction) {
                 .addOptions([
                     { label: '🚚 Order Issues', value: 'order_tracking', description: 'For issues related to orders, shipping, etc.' },
                     { label: '🔄 Node Forgo/Return', value: 'node_forgo_return', description: 'For issues related to forgoing or returning nodes.' },
-                    { label: '♻️ Fry Conversion Issues', value: 'fry_conversion_issues', description: 'Issues related to the FRY 1.0 conversion.' },                    
+                    { label: '♻️ Fry Conversion Issues', value: 'fry_conversion_issues', description: 'Issues related to the FRY 1.0 conversion.' },
+                    { label: '🤝 Flxtime Partners Support', value: 'flxtime_partners_support', description: 'Support for verified Flxtime Flexer members.' },
                     { label: '✍️ Registration', value: 'registration', description: 'Problems with account registration or setup.' },
                     { label: '🔑 Miner Keys', value: 'miner_keys', description: 'Issues with miner keys or access.' },
                     { label: '💰 Rewards', value: 'rewards', description: 'Questions or problems regarding rewards.' },
@@ -700,6 +702,34 @@ async function handleButton(interaction) { // No longer receiving client here
         await handleConfirmSnPicture(interaction, ticketId);
     } else if (action === 'confirm_factory_reset_picture') {
         await handleConfirmFactoryResetPicture(interaction, ticketId);
+    } else if (action === 'validate_flxtime_partner') {
+        // 🚫 Role restriction check
+        if (!interaction.member.roles.cache.has(config.ticketModRoleId)) {
+            return interaction.reply({
+                content: '❌ You do not have permission to validate Flxtime partners.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+        await flxtimePartnersHandler.handleValidateFlxtimeButton(interaction, ticketId);
+    } else if (action === 'issue_aem_key') {
+        // 🚫 Role restriction check
+        if (!interaction.member.roles.cache.has(config.ticketModRoleId)) {
+            return interaction.reply({
+                content: '❌ You do not have permission to issue AEM keys.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+        await flxtimePartnersHandler.handleIssueAemKeyButton(interaction, ticketId);
+    } else if (action === 'confirm_flxtime_validation') {
+        // 🚫 Role restriction check
+        if (!interaction.member.roles.cache.has(config.ticketModRoleId)) {
+            return interaction.reply({
+                content: '❌ You do not have permission to validate Flxtime partners.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+        const [_, confirmTicketId, confirmation] = interaction.customId.split(':');
+        await flxtimePartnersHandler.handleValidationConfirmation(interaction, confirmTicketId, confirmation);
     }
     // Other button interactions can be handled here
 }

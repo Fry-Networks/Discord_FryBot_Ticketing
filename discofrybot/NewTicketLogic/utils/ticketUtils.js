@@ -30,6 +30,56 @@ function getTicketActionRow(ticketInfo) {
 
     const rows = [new ActionRowBuilder().addComponents(...baseComponents)];
 
+    // Add Flxtime Partners specific buttons to a second row if applicable
+    if (ticketInfo.ticket_type === 'flxtime_partners_support') {
+        const flxtimeComponents = [];
+
+        // Add Validate Flxtime Partner button if not validated
+        if (!ticketInfo.flxtime_validated) {
+            flxtimeComponents.push(
+                new ButtonBuilder()
+                    .setCustomId(`validate_flxtime_partner:${ticketInfo.id}`)
+                    .setLabel('✅ Validate Flxtime Partner')
+                    .setStyle(ButtonStyle.Success)
+            );
+        }
+
+        // Add Issue AEM Key button if validated but no key issued yet
+        if (ticketInfo.flxtime_validated && !ticketInfo.aem_key_issued) {
+            flxtimeComponents.push(
+                new ButtonBuilder()
+                    .setCustomId(`issue_aem_key:${ticketInfo.id}`)
+                    .setLabel('🔑 Issue AEM Key')
+                    .setStyle(ButtonStyle.Primary)
+            );
+        }
+
+        // Show status indicators when actions are complete
+        if (ticketInfo.flxtime_validated) {
+            flxtimeComponents.push(
+                new ButtonBuilder()
+                    .setCustomId(`flxtime_validated_label:${ticketInfo.id}`)
+                    .setLabel('✅ Validated')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(true)
+            );
+        }
+
+        if (ticketInfo.aem_key_issued) {
+            flxtimeComponents.push(
+                new ButtonBuilder()
+                    .setCustomId(`aem_key_issued_label:${ticketInfo.id}`)
+                    .setLabel('🔑 Key Issued')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(true)
+            );
+        }
+
+        if (flxtimeComponents.length > 0) {
+            rows.push(new ActionRowBuilder().addComponents(...flxtimeComponents));
+        }
+    }
+
     // Add Node Forgo/Return specific buttons to a second row if applicable
     if (ticketInfo.ticket_type === 'node_forgo_return') {
         const nodeForgoReturnComponents = [];

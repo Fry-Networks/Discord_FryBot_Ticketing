@@ -491,6 +491,28 @@ async function getInactiveTicketsRpc() {
 }
 
 /**
+ * Calls the Supabase RPC function to get Flxtime tickets needing screenshot reminders.
+ * @returns {Promise<Array<object>|null>} An array of Flxtime tickets needing reminders or null on error.
+ */
+async function getFlxtimeTicketsNeedingReminderRpc() {
+    try {
+        const { data, error } = await supabase.rpc('get_flxtime_tickets_needing_reminder');
+
+        if (error) {
+            logger.error(`Error calling get_flxtime_tickets_needing_reminder RPC: ${error.message}`, error);
+            throw error;
+        }
+        // RPCs typically return data directly, not in a 'data' property for single results
+        // Assuming this RPC returns an array of objects
+        logger.info(`get_flxtime_tickets_needing_reminder RPC called successfully. Found ${data ? data.length : 0} Flxtime tickets needing reminders.`);
+        return data;
+    } catch (err) {
+        logger.error(`Exception calling get_flxtime_tickets_needing_reminder RPC: ${err.message}`, err);
+        throw err;
+    }
+}
+
+/**
  * Updates a message in the 'ticket_messages' table.
  * @param {string} discordMessageId - The Discord message ID of the message to update.
  * @param {string} newContent - The new content of the message (JSON string).
@@ -1115,6 +1137,7 @@ module.exports = {
     getTicketByChannelId, // Export function to get ticket by channel ID
     logBotActivity, // Export function for logging bot activity
     getInactiveTicketsRpc, // Export RPC function
+    getFlxtimeTicketsNeedingReminderRpc, // Export RPC function for Flxtime reminders
     checkConversionEligibility, // Export function to check conversion eligibility
     getFry1Balance, // Export function to get FRY 1.0 balance
     getAlgoBalance, // Export function to get ALGO balance

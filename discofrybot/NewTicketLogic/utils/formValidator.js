@@ -20,6 +20,8 @@ const VALIDATION_PATTERNS = {
     MINER_KEYS: minerKeyRegex,
     // Modified regex for more flexible matching of "Order" (case-insensitive) and spacing (\s*)
     ORDERS_QUANTITIES: /^order\s*\d+:\s*\d+\s*nodes?(?:\norder\s*\d+:\s*\d+\s*nodes?)*$/i,
+    // Solana address pattern: Base58 encoded, typically 32-44 characters
+    SOLANA_ADDRESS: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/,
 };
 
 const baseFields = {
@@ -58,7 +60,13 @@ const baseFields = {
         .setLabel('Orders and Quantities')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true)
-        .setPlaceholder('e.g., Order #12345: 2 nodes\nOrder #67890: 1 node')
+        .setPlaceholder('e.g., Order #12345: 2 nodes\nOrder #67890: 1 node'),
+    solana_wallet_address: new TextInputBuilder()
+        .setCustomId('solana_wallet_address')
+        .setLabel('Solana Wallet Address')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setPlaceholder('e.g., 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM')
 };
 
 const ticketFields = {
@@ -68,7 +76,8 @@ const ticketFields = {
     rewards: ['contact_info', 'minerkeys', 'order_number', 'algorand_address', 'description'],
     tech_support: ['contact_info', 'minerkeys', 'order_number', 'algorand_address', 'description'],
     node_forgo_return: ['contact_info', 'order_number', 'orders_quantities', 'algorand_address'],
-    fry_conversion_issues: ['contact_info', 'algorand_address', 'description']
+    fry_conversion_issues: ['contact_info', 'algorand_address', 'description'],
+    flxtime_partners_support: ['contact_info', 'solana_wallet_address', 'description']
 };
 
 // Sanitization + Validation Functions
@@ -102,6 +111,24 @@ function sanitizeAndValidateAlgorandAddress(value) {
     if (!value) return { error: ERROR_MESSAGES.ALGORAND_ADDRESS };
     const sanitizedValue = validator.trim(value);
     if (!VALIDATION_PATTERNS.ALGORAND_ADDRESS.test(sanitizedValue)) return { error: ERROR_MESSAGES.ALGORAND_ADDRESS };
+    return { value: sanitizedValue };
+}
+
+function sanitizeAndValidateSolanaAddress(value) {
+    if (!value) return { error: 'Solana wallet address cannot be empty.' };
+    const sanitizedValue = validator.trim(value);
+    
+    // Check basic format
+    if (!VALIDATION_PATTERNS.SOLANA_ADDRESS.test(sanitizedValue)) {
+        return { error: 'Invalid Solana wallet address format. Must be 32-44 characters using Base58 encoding (example: 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM).' };
+    }
+    
+    // Additional validation: check for common invalid characters
+    const invalidChars = sanitizedValue.match(/[0OIl]/g);
+    if (invalidChars) {
+        return { error: 'Invalid Solana wallet address. Base58 encoding does not use the characters: 0, O, I, or l.' };
+    }
+    
     return { value: sanitizedValue };
 }
 
@@ -251,6 +278,11 @@ function validateTicketSubmission(ticketType, fields) {
                 if (result.error) errors.push(result.error);
                 else if (result.value) validatedData.ordersQuantities = result.value;
                 break;
+            case 'solana_wallet_address':
+                result = sanitizeAndValidateSolanaAddress(rawValue);
+                if (result.error) errors.push(result.error);
+                else if (result.value) validatedData.solanaWalletAddress = result.value;
+                break;
             case 'description':
                 result = sanitizeAndValidateDescription(rawValue);
                 if (result.error) errors.push(result.error);
@@ -270,5 +302,6 @@ module.exports = {
     ticketFields,
     validateTicketSubmission,
     VALIDATION_PATTERNS, // Exporting patterns might be useful for other modules if needed
-    sanitizeAndValidateAlgorandAddress // Export the specific function
+    sanitizeAndValidateAlgorandAddress, // Export the specific function
+    sanitizeAndValidateSolanaAddress // Export the Solana validation function
 };

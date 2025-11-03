@@ -35,6 +35,7 @@ const config = {
         tech_support: process.env.TICKET_CAT_TECH_SUPPORT,
         node_forgo_return: process.env.TICKET_CAT_NODE_FORGO_RETURN,
         fry_conversion_issues: process.env.TICKET_CAT_FRY_CONVERSION,
+        flxtime_partners_support: process.env.TICKET_CAT_FLXTIME_PARTNERS,
     },
     closedTicketsCategoryId: process.env.CLOSED_TICKET_CAT,
     guildId: process.env.GUILD_ID, // Discord server ID where the bot operates
@@ -74,6 +75,11 @@ const config = {
 
     // Algod URL for Algorand network calls
     ALGOD_API_URL: process.env.ALGOD_API_URL,
+
+    // Flxtime Integration (future-ready configuration)
+    flxtimeVerificationEnabled: process.env.FLXTIME_VERIFICATION_ENABLED === 'true',
+    flxtimeServerId: process.env.FLXTIME_SERVER_ID,
+    flxtimeFlexerRoleId: process.env.FLXTIME_FLEXER_ROLE_ID,
 };
 
 // Validate essential configurations

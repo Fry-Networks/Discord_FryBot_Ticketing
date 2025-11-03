@@ -85,6 +85,7 @@ const client = new Client({
 // Ticket system integration
 //const { registerTicketCommands, setupTicketPanel } = require('./ticketSystem');
 const { initializeTicketSystem } = require('./NewTicketLogic/ticketSystem');
+const { initializeScreenshotDetection } = require('./NewTicketLogic/handlers/screenshotDetectionHandler');
 // require('./Ticket-System/ticketClaimManager')(client);
 require('./balanceCheck')(client); // Initialize balance checking
 
@@ -437,6 +438,21 @@ client.once(Events.ClientReady, async () => {
     const prefix = '!'; // Define the command prefix
     initializeTicketSystem(client, prefix);
     logger.info('🔧 Ticket system initialized.');
+    
+    // Initialize screenshot detection for Flxtime Partners Support
+    initializeScreenshotDetection(client);
+    logger.info('📸 Screenshot detection initialized.');
+    
+    // Start Flxtime reminder system (check every 6 hours)
+    setInterval(async () => {
+        try {
+            await checkFlxtimeReminders(client);
+        } catch (error) {
+            logger.error(`Error in Flxtime reminder check: ${error.message}`, error);
+        }
+    }, 6 * 60 * 60 * 1000); // 6 hours in milliseconds
+    
+    logger.info('⏰ Flxtime reminder system started (checking every 6 hours).');
     
     // Fetch guild data
     const guild = client.guilds.cache.first();

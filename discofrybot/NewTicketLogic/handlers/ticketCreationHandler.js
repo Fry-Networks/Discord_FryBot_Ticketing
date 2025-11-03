@@ -9,6 +9,7 @@ const { validateTicketSubmission, baseFields, ticketFields } = require('../utils
 const supabaseHandler = require('./supabaseHandler');
 const { getTicketActionRow, formatNumberWithCommas } = require('../utils/ticketUtils'); // Import getTicketActionRow and formatNumberWithCommas
 const fryConversionHandler = require('./fryConversionHandler'); // Import the new conversion handler
+const flxtimePartnersHandler = require('./flxtimePartnersHandler'); // Import the Flxtime Partners handler
 
 const MAX_CHANNELS_PER_CATEGORY = 50;
 
@@ -129,6 +130,7 @@ async function handleTicketModalSubmit(interaction, ticketType) {
             algorand_address: validatedData.algorandAddress || 'N/A',
             minerkeys: validatedData.minerKeys || 'N/A',
             orders_quantities: validatedData.ordersQuantities || 'N/A', // Added new field
+            solana_wallet_address: validatedData.solanaWalletAddress || 'N/A', // Added Solana wallet support
         };
 
         const newTicket = await supabaseHandler.insertTicket(ticketRecord);
@@ -228,6 +230,7 @@ async function handleTicketModalSubmit(interaction, ticketType) {
         if (validatedData.email) embedFieldsData.push({ name: 'Email', value: `\`\`\`\n${validatedData.email}\n\`\`\``, inline: false });
         if (validatedData.orderNumber && validatedData.orderNumber !== 'N/A') embedFieldsData.push({ name: 'Order Number', value: `\`\`\`\n${validatedData.orderNumber}\n\`\`\``, inline: false });
         if (validatedData.algorandAddress && validatedData.algorandAddress !== 'N/A') embedFieldsData.push({ name: 'Algorand Address', value: `\`\`\`\n${validatedData.algorandAddress}\n\`\`\``, inline: false });
+        if (validatedData.solanaWalletAddress && validatedData.solanaWalletAddress !== 'N/A') embedFieldsData.push({ name: 'Solana Wallet Address', value: `\`\`\`\n${validatedData.solanaWalletAddress}\n\`\`\``, inline: false });
         if (validatedData.minerKeys && validatedData.minerKeys !== 'N/A') embedFieldsData.push({ name: 'Miner Keys', value: `\`\`\`\n${validatedData.minerKeys}\n\`\`\``, inline: false });
         // Add orders_quantities to embed if it exists and is an array, formatting it for display
         if (Array.isArray(validatedData.ordersQuantities) && validatedData.ordersQuantities.length > 0) {
@@ -721,6 +724,15 @@ async function handleTicketModalSubmit(interaction, ticketType) {
                         await ticketChannel.send({ content: `<@${user.id}> ${lowBalanceWarningMessage}` }).catch(err => logger.error(`Failed to send low balance warning to ${ticketChannel.id}`, err));
                     }
 
+                }, 3000); // 3 seconds after the welcome message
+            } else if (ticketType === 'flxtime_partners_support') {
+                setTimeout(async () => {
+                    try {
+                        await flxtimePartnersHandler.sendFlxtimePartnersWelcomeMessage(ticketChannel, user, validatedData);
+                        logger.info(`Flxtime Partners welcome message sent for ticket ${ticketId}`);
+                    } catch (error) {
+                        logger.error(`Failed to send Flxtime Partners welcome message for ticket ${ticketId}: ${error.message}`, error);
+                    }
                 }, 3000); // 3 seconds after the welcome message
             }
 

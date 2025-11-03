@@ -1,6 +1,12 @@
 # ✅ Task Tracker – Discord Ticketing Rewrite
 
 ## Active Tasks
+- [x] **Switch balanceCheck from Fry 1 to tFRY monitoring** - Completed 11/3/2025
+  - Remove all Fry1 monitoring and notifications completely
+  - Enable tFRY monitoring with asset ID 2681521901
+  - Fix missing 8-hour status notifications issue
+- [x] Added ticket category for FLXtime users and automated AEM key generation after validation complete. - Completed 11/3/2025
+- [x] Enhanced messageFilter for scammer messages detection and disciplanary action. - Completed 11/3/2025
 - [x] Scaffold new Discord bot structure (break out `ticketSystem.js`) - Completed 5/12/25
 - [x] Rewrite ticket panel and form logic using modular commands/components - Completed 5/12/25
 - [x] Enforce one-ticket-per-user rule across all categories - Completed 5/12/25

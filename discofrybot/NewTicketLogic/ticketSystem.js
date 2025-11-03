@@ -8,6 +8,8 @@ const supabaseHandler = require('./handlers/supabaseHandler'); // Import supabas
 const closeHandler = require('./modules/closeHandler'); // Import closeHandler
 const { registerSlashCommands } = require('./utils/slashCommandManager'); // Import command registration function
 const inactivityPinger = require('./modules/inactivityPinger'); // Import inactivity pinger module
+const flxtimePartnersHandler = require('./handlers/flxtimePartnersHandler'); // Import Flxtime Partners handler
+const screenshotDetectionHandler = require('./handlers/screenshotDetectionHandler'); // Import screenshot detection handler
 
 // Define the interval for checking scheduled closures (in milliseconds)
 const SCHEDULED_CLOSURE_CHECK_INTERVAL = 7200000; // Check every 2 hours
@@ -31,6 +33,9 @@ function initializeTicketSystem(client, prefix) {
 
     // Initialize all interaction handlers (slash commands, buttons, modals, select menus)
     initializeInteractionHandlers(client);
+
+    // Initialize screenshot detection for Flxtime Partners Support tickets
+    screenshotDetectionHandler.initializeScreenshotDetection(client);
 
     // Add message listener to log messages in ticket channels
     client.on(Events.MessageCreate, async (message) => {
@@ -262,6 +267,31 @@ function initializeTicketSystem(client, prefix) {
                 } else {
                     logger.info('No inactive tickets found requiring a ping.');
                 }
+
+                // Check for Flxtime tickets needing screenshot reminders (24-hour system)
+                logger.info('Checking for Flxtime tickets needing screenshot reminders...');
+                try {
+                    let flxtimeTicketsNeedingReminder = await supabaseHandler.getFlxtimeTicketsNeedingReminderRpc();
+                    
+                    if (flxtimeTicketsNeedingReminder && flxtimeTicketsNeedingReminder.length > 0) {
+                        logger.info(`Found ${flxtimeTicketsNeedingReminder.length} Flxtime tickets needing screenshot reminders. Processing...`);
+                        
+                        for (const ticket of flxtimeTicketsNeedingReminder) {
+                            try {
+                                await flxtimePartnersHandler.sendScreenshotReminder(client, ticket);
+                                logger.info(`Successfully sent screenshot reminder for Flxtime ticket ${ticket.id}.`);
+                            } catch (processingError) {
+                                logger.error(`Error sending screenshot reminder for Flxtime ticket ${ticket.id}: ${processingError.message}`, processingError);
+                                // Continue to the next ticket even if one fails
+                            }
+                        }
+                    } else {
+                        logger.info('No Flxtime tickets found needing screenshot reminders.');
+                    }
+                } catch (flxtimeError) {
+                    logger.error(`Error checking Flxtime tickets needing reminders: ${flxtimeError.message}`, flxtimeError);
+                }
+
             } catch (error) {
                 logger.error(`Unhandled error during inactivity check interval: ${error.message}`, error);
             }
