@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { WalletProvider } from "@/components/WalletProvider";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -28,9 +29,11 @@ export default function RootLayout({
           minHeight: '100vh',
         }}
       >
-        <div className="min-h-screen bg-black/15 backdrop-blur-sm text-white">
-          {children}
-        </div>
+        <WalletProvider>
+          <div className="min-h-screen bg-black/15 backdrop-blur-sm text-white">
+            {children}
+          </div>
+        </WalletProvider>
       </body>
     </html>
   );

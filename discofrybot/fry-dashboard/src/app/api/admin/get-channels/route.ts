@@ -26,10 +26,24 @@ export async function GET() {
       throw new Error(`Error fetching channels: ${response.statusText}`);
     }
 
-    const channels = await response.json();
-    const textChannels = channels.filter((channel: any) => channel.type === 0);
+    const allChannels = await response.json();
 
-    return NextResponse.json(textChannels.map((channel: any) => ({ id: channel.id, name: channel.name })));
+    // Filter for text channels (type 0) and category channels (type 4)
+    const textChannels = allChannels.filter((channel: any) => channel.type === 0);
+    const categoryChannels = allChannels.filter((channel: any) => channel.type === 4);
+
+    // Map text channels to include parent_id and parent_name
+    const mappedChannels = textChannels.map((channel: any) => {
+      const parentCategory = categoryChannels.find((cat: any) => cat.id === channel.parent_id);
+      return {
+        id: channel.id,
+        name: channel.name,
+        parent_id: channel.parent_id || null,
+        parent_name: parentCategory ? parentCategory.name : null,
+      };
+    });
+
+    return NextResponse.json(mappedChannels);
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Error fetching channels' }, { status: 500 });
