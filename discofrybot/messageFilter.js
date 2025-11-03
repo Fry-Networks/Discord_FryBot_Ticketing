@@ -50,6 +50,31 @@ function normalizeMessage(messageContent) {
 }
 
 /**
+ * Escapes regex special characters in a string.
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeForRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Builds a regex that tolerates common obfuscation characters between letters.
+ * Example: buildLoosePattern('vercel') will match v e r c e l, v.e.r.c.e.l, etc.
+ * @param {string} keyword
+ * @returns {RegExp}
+ */
+function buildLoosePattern(keyword) {
+    const escaped = escapeForRegex(keyword.toLowerCase());
+    const characters = escaped.split('').filter(Boolean);
+    if (!characters.length) {
+        return /$^/; // Matches nothing
+    }
+    const body = characters.map(char => `${char}[^a-z0-9]{0,3}`).join('');
+    return new RegExp(`(?:^|[^a-z0-9])${body}(?:[^a-z0-9]|$)`, 'i');
+}
+
+/**
  * Extracts potential URLs from a normalized message and validates if they are
  * frynetworks.com or a subdomain, returning details about any suspicious findings.
  * Adds exceptions for internal Discord links and allowed GIF domains.
@@ -67,6 +92,14 @@ function extractAndValidateUrls(normalizedMessage, guildId) { // Added guildId p
     const potentialMatches = normalizedMessage.match(potentialUrlPattern);
 
     if (!potentialMatches) {
+        const obfuscatedInvite = detectObfuscatedDiscordInvite(normalizedMessage);
+        if (obfuscatedInvite) {
+            return obfuscatedInvite;
+        }
+        const keywordOnlyHit = detectSuspiciousKeywords(normalizedMessage);
+        if (keywordOnlyHit) {
+            return keywordOnlyHit;
+        }
         return { isSuspicious: false }; // No URL-like patterns found
     }
 
@@ -78,6 +111,7 @@ function extractAndValidateUrls(normalizedMessage, guildId) { // Added guildId p
 
     for (const potentialMatch of potentialMatches) {
         // Check specifically for Discord invites first (still high-risk)
+        discordInviteRegex.lastIndex = 0;
         if (discordInviteRegex.test(potentialMatch)) {
              logger.warn(`Discord invite pattern found: "${potentialMatch}"`);
              return { isSuspicious: true, type: 'discord_invite', pattern: potentialMatch };
@@ -122,12 +156,144 @@ function extractAndValidateUrls(normalizedMessage, guildId) { // Added guildId p
             // If URL parsing fails even after prepending a scheme,
             // it's likely a highly malformed or intentionally obfuscated attempt.
             // We should treat this as suspicious.
-            logger.warn(`Could not parse potential URL: "${potentialMatch}" - Flagging for review. Error: ${e.message}`);
-            return { isSuspicious: true, type: 'unparseable_url', pattern: potentialMatch }; // Flag unparseable URL-like strings
+                logger.warn(`Could not parse potential URL: "${potentialMatch}" - Flagging for review. Error: ${e.message}`);
+                return { isSuspicious: true, type: 'unparseable_url', pattern: potentialMatch }; // Flag unparseable URL-like strings
         }
     }
 
+    // Run a secondary pass for highly obfuscated Discord invites if nothing else matched
+    const obfuscatedInviteFallback = detectObfuscatedDiscordInvite(normalizedMessage);
+    if (obfuscatedInviteFallback) {
+        return obfuscatedInviteFallback;
+    }
+
+    // Finally, check for suspicious keywords commonly used in scam campaigns
+    const suspiciousKeywordHit = detectSuspiciousKeywords(normalizedMessage);
+    if (suspiciousKeywordHit) {
+        return suspiciousKeywordHit;
+    }
+
     return { isSuspicious: false }; // All found URL-like patterns are either valid frynetworks.com domains, new allowed domains, or were handled
+}
+
+/**
+ * Attempts to detect Discord invite links that have been obfuscated with spacer characters.
+ * This guards against patterns like "di > sco > rd . gg" that slip past simpler regexes.
+ * @param {string} normalizedMessage
+ * @returns {{isSuspicious: boolean, type: string, domain: string, pattern: string}|null}
+ */
+function detectObfuscatedDiscordInvite(normalizedMessage) {
+    if (!normalizedMessage) return null;
+
+    const patterns = [
+        {
+            regex: /d[\W_]*i[\W_]*s[\W_]*c[\W_]*o[\W_]*r[\W_]*d[\W_]*\.[\W_]*g[\W_]*g[\W_]*\/[\W_]*([a-z0-9][a-z0-9\-]{3,})/gi,
+            domain: 'discord.gg'
+        },
+        {
+            regex: /d[\W_]*i[\W_]*s[\W_]*c[\W_]*o[\W_]*r[\W_]*d[\W_]*(?:[\W_]*app)?[\W_]*\.[\W_]*c[\W_]*o[\W_]*m[\W_]*\/[\W_]*invite[\W_]*\/[\W_]*([a-z0-9][a-z0-9\-]{3,})/gi,
+            domain: 'discord.com'
+        }
+    ];
+
+    for (const { regex, domain } of patterns) {
+        const match = regex.exec(normalizedMessage);
+        if (match && match[0]) {
+            const cleanedPattern = match[0]
+                .replace(/[^a-z0-9/.:_-]+/gi, '')
+                .replace(/\/{2,}/g, '/')
+                .replace(/\.{2,}/g, '.')
+                .toLowerCase();
+
+            if (!cleanedPattern.includes('discord.gg') &&
+                !cleanedPattern.includes('discord.com') &&
+                !cleanedPattern.includes('discordapp.com')) {
+                continue;
+            }
+
+            let detectedDomain = domain;
+            if (cleanedPattern.includes('discordapp.com')) {
+                detectedDomain = 'discordapp.com';
+            } else if (cleanedPattern.includes('discord.com')) {
+                detectedDomain = 'discord.com';
+            } else if (cleanedPattern.includes('discord.gg')) {
+                detectedDomain = 'discord.gg';
+            }
+
+            return {
+                isSuspicious: true,
+                type: 'discord_invite',
+                domain: detectedDomain,
+                pattern: cleanedPattern
+            };
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Detects high-risk keywords that often accompany scam campaigns, even when no URL is present.
+ * @param {string} normalizedMessage
+ * @returns {{isSuspicious: boolean, type: string, keyword: string, pattern: string}|null}
+ */
+function detectSuspiciousKeywords(normalizedMessage) {
+    if (!normalizedMessage) return null;
+
+    const compactMessage = normalizedMessage.replace(/[^a-z0-9]/g, '');
+
+    const keywordRules = [
+        { keyword: 'vercel', regexes: [buildLoosePattern('vercel'), /vercel\.app/i] },
+        { keyword: 'opensea', regexes: [buildLoosePattern('opensea')] },
+        { keyword: 'solana', regexes: [buildLoosePattern('solana')] },
+        {
+            keyword: 'sol',
+            regexes: [/\bsol\b/i],
+            contextRegex: /(wallet|airdrop|mint|claim|token|address|link|support|help|issue|fix|team|verify)/
+        },
+        {
+            keyword: 'airdrop',
+            regexes: [/(?:claim|join|participate|mint)[^a-z0-9]{0,3}airdrop|airdrop[^a-z0-9]{0,3}(?:now|here|today|live|claim)/i]
+        },
+        { keyword: 'free_mint', regexes: [/free[^a-z0-9]{0,3}mint/i] },
+        { keyword: 'mint_now', regexes: [/mint[^a-z0-9]{0,3}(?:now|today|asap)/i] },
+        { keyword: 'claim_reward', regexes: [/claim[^a-z0-9]{0,3}(?:your)?[^a-z0-9]{0,3}(?:reward|prize|compensation)/i] },
+        { keyword: 'phantom_wallet', regexes: [buildLoosePattern('phantom')] },
+        { keyword: 'metamask_wallet', regexes: [buildLoosePattern('metamask')] },
+        { keyword: 'walletconnect', regexes: [buildLoosePattern('walletconnect')] }
+    ];
+
+    for (const rule of keywordRules) {
+        for (const regex of rule.regexes) {
+            const match = normalizedMessage.match(regex);
+            if (match) {
+                if (rule.contextRegex && !rule.contextRegex.test(normalizedMessage)) {
+                    continue;
+                }
+                return {
+                    isSuspicious: true,
+                    type: 'suspicious_keyword',
+                    keyword: rule.keyword,
+                    pattern: match[0]
+                };
+            }
+        }
+
+        if (rule.compactIncludes) {
+            for (const fragment of rule.compactIncludes) {
+                if (compactMessage.includes(fragment)) {
+                    return {
+                        isSuspicious: true,
+                        type: 'suspicious_keyword',
+                        keyword: rule.keyword,
+                        pattern: fragment
+                    };
+                }
+            }
+        }
+    }
+
+    return null;
 }
 
 // Export the main function needed by discofrybot.js

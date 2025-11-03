@@ -4,25 +4,22 @@ const logger = require('./logger');
 const FRYBAL_ROLE_ID = process.env.FRYBAL_ROLE_ID;
 const REWARD_WALLET_ADDRESS = process.env.REWARD_WALLET_ADDRESS;
 const ASSET_ID_FNODE = parseInt(process.env.ASSET_ID_FNODE);
-const ASSET_ID_FRY1 = parseInt(process.env.ASSET_ID_FRY1);
 const ASSET_ID_FRY2 = parseInt(process.env.ASSET_ID_FRY2);
 const ASSET_ID_TFRY = parseInt(process.env.ASSET_ID_TFRY);
 const LOW_BAL_CHANNEL_ID = process.env.LOW_BAL_CHANNEL_ID;
 
-const DISABLED_ALERT_ASSETS = ['TFry'];
+const DISABLED_ALERT_ASSETS = [];
 
 // Persistent thresholds storage
 const notificationThresholds = {
     fNode: { 30000: false, 15000: false, 5000: false },
-    Fry1: { 500000: false, 250000: false, 50000: false },
     Fry2: { 5000: false, 2500: false, 1000: false }, // Example thresholds, can be adjusted
-    TFry: {} // No thresholds for TFry, alerts disabled via DISABLED_ALERT_ASSETS
+    TFry: { 500000: false, 250000: false, 50000: false }
 };
 
 // Track if we have already sent a refill message
 const refillSent = {
     fNode: false,
-    Fry1: false,
     Fry2: false,
     TFry: false
 };
@@ -30,7 +27,6 @@ const refillSent = {
 // Track previous balance state
 const previousBalanceState = {
     fNode: null,
-    Fry1: null,
     Fry2: null,
     TFry: null
 };
@@ -38,7 +34,6 @@ const previousBalanceState = {
 // "Critical Alert Sent" Flag
 const criticalAlertSent = {
     fNode: false,
-    Fry1: false,
     Fry2: false,
     TFry: false
 };
@@ -98,6 +93,7 @@ async function sendStaffNotification(client, message, title = "Balance Alert", c
     }
     const channel = client.channels.cache.get(LOW_BAL_CHANNEL_ID);
     if (channel && channel.isTextBased()) {
+        logger.info(`✅ Found channel with ID: ${LOW_BAL_CHANNEL_ID}`);
         const { EmbedBuilder } = require('discord.js');
         const embed = new EmbedBuilder()
             .setTitle(title)
@@ -112,9 +108,14 @@ async function sendStaffNotification(client, message, title = "Balance Alert", c
             pingMessage = "";
         }
 
-        await channel.send({ content: pingMessage, embeds: [embed] });
+        try {
+            await channel.send({ content: pingMessage, embeds: [embed] });
+            logger.info(`✅ Message sent to channel: ${LOW_BAL_CHANNEL_ID}`);
+        } catch (sendError) {
+            logger.error(`❌ Failed to send message to channel ${LOW_BAL_CHANNEL_ID}: ${sendError.message}`);
+        }
     } else {
-        logger.error("❌ Failed to find the staff mod channel.");
+        logger.error(`❌ Failed to find the staff mod channel with ID: ${LOW_BAL_CHANNEL_ID}. Channel object: ${JSON.stringify(channel)}`);
     }
 }
 
@@ -123,12 +124,11 @@ async function checkBalances(client) {
     const now = Date.now(); 
     const balances = {
         fNode: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FNODE),
-        Fry1: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FRY1),
         Fry2: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FRY2),
         TFry: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_TFRY)
     };
 
-    //logger.info(`📊 Balance Check: fNode: ${balances.fNode}, Fry1: ${balances.Fry1}`);
+    //logger.info(`📊 Balance Check: fNode: ${balances.fNode}, TFry: ${balances.TFry}`);
 
     let notificationMessage = '';
     let refillMessages = [];
@@ -228,8 +228,8 @@ async function checkBalances(client) {
         if (allBalancesAreSafe) {
             await sendStaffNotification(
                 client,
-                `✅ All systems running. Balance checker report:\n\n🔹 fNode: ${balances.fNode.toFixed(2)}\n🔹 Fry1: ${balances.Fry1.toFixed(2)}\n🔹 Fry2: ${balances.Fry2.toFixed(2)}`,
-                "Bot Status Check",
+                `✅ All systems running. Balance checker report:\n\n🔹 fNode: ${balances.fNode.toFixed(2)}\n🔹 Fry2: ${balances.Fry2.toFixed(2)}\n🔹 tFRY: ${balances.TFry.toFixed(2)}`,
+                "✅ Bot Status Check",
                 0x3498db
             );
         }
@@ -237,19 +237,18 @@ async function checkBalances(client) {
     const hasIssuesOrRefills = notificationMessage || refillMessages.length > 0;
 
     if (hasIssuesOrRefills) {
-        logger.info(`📊 Balance Check (Issue/Refill): fNode: ${balances.fNode.toFixed(2)}, Fry1: ${balances.Fry1.toFixed(2)}`);
+        logger.info(`📊 Balance Check (Issue/Refill): fNode: ${balances.fNode.toFixed(2)}, TFry: ${balances.TFry.toFixed(2)}`);
         lastHourlyInfoLogTime = now; // Reset timer if an issue/refill occurred
     } else if (now - lastHourlyInfoLogTime >= HOURLY_LOG_INTERVAL) {
-        logger.info(`📊 Balance Check (Hourly Status): fNode: ${balances.fNode.toFixed(2)}, Fry1: ${balances.Fry1.toFixed(2)}`);
+        logger.info(`📊 Balance Check (Hourly Status): fNode: ${balances.fNode.toFixed(2)}, TFry: ${balances.TFry.toFixed(2)}`);
         lastHourlyInfoLogTime = now;
-    }    
+    }
 }
 
 // Initialize balance checking
 module.exports = (client) => {
     // Reset critical alert flags on bot startup
     criticalAlertSent.fNode = false;
-    criticalAlertSent.Fry1 = false;
     criticalAlertSent.Fry2 = false;
     criticalAlertSent.TFry = false;
 
@@ -262,3 +261,17 @@ module.exports = (client) => {
         }
     }, 120 * 1000);
 };
+
+
+async function reportCurrentBalances(client) {
+    const balances = {
+        fNode: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FNODE),
+        Fry2: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FRY2),
+        TFry: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_TFRY),
+    };
+
+    const message = `Current Balances:\n\n🔹 fNode: ${balances.fNode.toFixed(2)}\n🔹 Fry2: ${balances.Fry2.toFixed(2)}\n🔹 tFRY: ${balances.TFry.toFixed(2)}`;
+    await sendStaffNotification(client, message, "Current Balance Report", 0x007bff); // Using a blue color for general report
+}
+
+module.exports.reportCurrentBalances = reportCurrentBalances;
