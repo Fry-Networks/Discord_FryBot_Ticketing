@@ -11,7 +11,7 @@ const inactivityPinger = require('./modules/inactivityPinger'); // Import inacti
 
 // Define the interval for checking scheduled closures (in milliseconds)
 const SCHEDULED_CLOSURE_CHECK_INTERVAL = 7200000; // Check every 2 hours
-const INACTIVITY_CHECK_INTERVAL = 172800000; // Check every 48 hours
+const INACTIVITY_CHECK_INTERVAL = 432100000; // Check every 48 hours
 
 /**
  * Initializes the new ticket system logic.
@@ -209,60 +209,64 @@ function initializeTicketSystem(client, prefix) {
     // Define the interval for checking inactivity (in milliseconds)
     // This should ideally be configurable via config.js or .env
 
-    setInterval(async () => {
-        logger.info('Checking for inactive tickets...');
-        try {
-            // TODO: Implement get_inactive_tickets RPC in Supabase
-            // For now, assuming it returns an array of tickets that need pinging
-            let inactiveTickets = await supabaseHandler.getInactiveTicketsRpc(); // Call the actual RPC function
+    if (!config.inactivityMonitoringEnabled) {
+        logger.warn('Inactivity monitoring is disabled. Skipping inactivity checks and auto-closures.');
+    } else {
+        setInterval(async () => {
+            logger.info('Checking for inactive tickets...');
+            try {
+                // TODO: Implement get_inactive_tickets RPC in Supabase
+                // For now, assuming it returns an array of tickets that need pinging
+                let inactiveTickets = await supabaseHandler.getInactiveTicketsRpc(); // Call the actual RPC function
 
-            if (inactiveTickets && inactiveTickets.length > 0) {
-                // Filter out tickets that are set to ignore inactivity
-                const filteredTickets = inactiveTickets.filter(ticket => !ticket.ignore_inactivity);
+                if (inactiveTickets && inactiveTickets.length > 0) {
+                    // Filter out tickets that are set to ignore inactivity
+                    const filteredTickets = inactiveTickets.filter(ticket => !ticket.ignore_inactivity);
 
-                logger.info(`Found ${inactiveTickets.length} inactive tickets. ${filteredTickets.length} remaining after ignoring exemptions. Processing pings...`);
+                    logger.info(`Found ${inactiveTickets.length} inactive tickets. ${filteredTickets.length} remaining after ignoring exemptions. Processing pings...`);
 
-                const now = Date.now();
-                const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+                    const now = Date.now();
+                    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
-                for (const ticket of filteredTickets) { // Iterate over filtered tickets
-                    const lastMessageAt = new Date(ticket.last_message_at).getTime();
-                    const idleDuration = now - lastMessageAt;
-                    const lastUserPingAt = ticket.last_inactivity_ping_at ? new Date(ticket.last_inactivity_ping_at).getTime() : 0;
-                    const timeSinceLastUserPing = now - lastUserPingAt;
-                    const lastStaffPingAt = ticket.last_staff_ping_at ? new Date(ticket.last_staff_ping_at).getTime() : 0;
-                    const timeSinceLastStaffPing = now - lastStaffPingAt;
+                    for (const ticket of filteredTickets) { // Iterate over filtered tickets
+                        const lastMessageAt = new Date(ticket.last_message_at).getTime();
+                        const idleDuration = now - lastMessageAt;
+                        const lastUserPingAt = ticket.last_inactivity_ping_at ? new Date(ticket.last_inactivity_ping_at).getTime() : 0;
+                        const timeSinceLastUserPing = now - lastUserPingAt;
+                        const lastStaffPingAt = ticket.last_staff_ping_at ? new Date(ticket.last_staff_ping_at).getTime() : 0;
+                        const timeSinceLastStaffPing = now - lastStaffPingAt;
 
 
-                    if (ticket.last_message_from_role === 'staff') { // Waiting for user
-                        if (ticket.inactivity_ping_count === 0 && idleDuration >= TWENTY_FOUR_HOURS_MS) {
-                            logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >24h, sending first user ping.`);
-                            await inactivityPinger.pingUserForInactivity(client, ticket);
-                        } else if (ticket.inactivity_ping_count === 1 && timeSinceLastUserPing >= TWENTY_FOUR_HOURS_MS) { // 24 hours after first user ping (48h total idle)
-                            logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >48h, sending second user ping.`);
-                            await inactivityPinger.pingUserForInactivity(client, ticket);
-                        } else if (ticket.inactivity_ping_count >= 2 && timeSinceLastUserPing >= TWENTY_FOUR_HOURS_MS) { // 24 hours after second user ping (72h total idle)
-                            logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >72h, triggering auto-close.`);
-                            await inactivityPinger.autoCloseInactiveTicket(client, ticket);
+                        if (ticket.last_message_from_role === 'staff') { // Waiting for user
+                            if (ticket.inactivity_ping_count === 0 && idleDuration >= TWENTY_FOUR_HOURS_MS) {
+                                logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >24h, sending first user ping.`);
+                                await inactivityPinger.pingUserForInactivity(client, ticket);
+                            } else if (ticket.inactivity_ping_count === 1 && timeSinceLastUserPing >= TWENTY_FOUR_HOURS_MS) { // 24 hours after first user ping (48h total idle)
+                                logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >48h, sending second user ping.`);
+                                await inactivityPinger.pingUserForInactivity(client, ticket);
+                            } else if (ticket.inactivity_ping_count >= 2 && timeSinceLastUserPing >= TWENTY_FOUR_HOURS_MS) { // 24 hours after second user ping (72h total idle)
+                                logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >72h, triggering auto-close.`);
+                                await inactivityPinger.autoCloseInactiveTicket(client, ticket);
+                            }
+                        } else if (ticket.last_message_from_role === 'user') { // Waiting for staff
+                            if (ticket.staff_ping_count === 0 && idleDuration >= TWENTY_FOUR_HOURS_MS) { // First staff ping (mod role)
+                                logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >24h, last message from user, sending first staff ping.`);
+                                await inactivityPinger.pingModeratorForInactivity(client, ticket);
+                            } else if (ticket.staff_ping_count === 1 && timeSinceLastStaffPing >= TWENTY_FOUR_HOURS_MS) { // Second staff ping (admin role)
+                                logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >48h, last message from user, sending second staff ping.`);
+                                await inactivityPinger.pingModeratorForInactivity(client, ticket);
+                            }
                         }
-                    } else if (ticket.last_message_from_role === 'user') { // Waiting for staff
-                        if (ticket.staff_ping_count === 0 && idleDuration >= TWENTY_FOUR_HOURS_MS) { // First staff ping (mod role)
-                            logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >24h, last message from user, sending first staff ping.`);
-                            await inactivityPinger.pingModeratorForInactivity(client, ticket);
-                        } else if (ticket.staff_ping_count === 1 && timeSinceLastStaffPing >= TWENTY_FOUR_HOURS_MS) { // Second staff ping (admin role)
-                            logger.info(`Ticket ${ticket.id} (user: ${ticket.user_id}) idle for >48h, last message from user, sending second staff ping.`);
-                            await inactivityPinger.pingModeratorForInactivity(client, ticket);
-                        }
+                        // Ignore 'bot' role or if role is not set
                     }
-                    // Ignore 'bot' role or if role is not set
+                } else {
+                    logger.info('No inactive tickets found requiring a ping.');
                 }
-            } else {
-                logger.info('No inactive tickets found requiring a ping.');
+            } catch (error) {
+                logger.error(`Unhandled error during inactivity check interval: ${error.message}`, error);
             }
-        } catch (error) {
-            logger.error(`Unhandled error during inactivity check interval: ${error.message}`, error);
-        }
-    }, INACTIVITY_CHECK_INTERVAL);
+        }, INACTIVITY_CHECK_INTERVAL);
+    }
 }
 
 module.exports = {

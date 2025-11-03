@@ -138,7 +138,7 @@ Let us know if you have any questions!`;
 
         // Check if this is a forgo ticket and conditions are met to prompt closure
         if (updatedTicket.request_type === 'forgo' && updatedTicket.bold_sign_signed && updatedTicket.registration_waived) {
-            const finalForgoMessage = `Your Node Forgo request is now complete! We have validated your BoldSign form, waived your registration, and issued your 50% off coupon. You will also receive your high APR NFT reward towards the end of Q3.
+            const finalForgoMessage = `Your Node Forgo request is now complete! We have validated your BoldSign form, waived your registration, and issued your 50% off coupon. You will receive your high APR NFT(s) towards the end of Q3! Stay tuned for more updates.
 
 If you have no further questions and your issue is resolved, you can close the ticket using the button below. If you still need assistance, click "More Questions".`;
 

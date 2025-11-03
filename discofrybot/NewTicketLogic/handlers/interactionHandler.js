@@ -337,6 +337,9 @@ async function handleModalSubmit(interaction) {
     } else if (interaction.customId.startsWith('burn_tx_check_modal:')) {
         const [_, ticketId] = interaction.customId.split(':');
         await fryConversionHandler.handleBurnTxModalSubmit(interaction, ticketId); // Use new handler        
+    } else if (interaction.customId.startsWith('conversion_status_check_modal:') || interaction.customId.startsWith('conversion_status_modal_submit:')) {
+        const [_, ticketId] = interaction.customId.split(':');
+        await fryConversionHandler.handleConversionStatusModalSubmit(interaction, ticketId); // Use new handler
     }
     // Other modal submissions can be handled here
 }
@@ -643,6 +646,21 @@ async function handleButton(interaction) { // No longer receiving client here
 
     } else if (action === 'check_burn_tx') {
         await fryConversionHandler.handleCheckBurnTxButton(interaction, ticketId); 
+    } else if (action === 'check_conversion_status') {
+        // This button now handles both direct check and modal prompt
+        await fryConversionHandler.handleCheckConversionStatusButton(interaction, ticketId);
+    } else if (action === 'conversion_guide') {
+        await fryConversionHandler.handleConversionGuideButton(interaction, ticketId);
+    } else if (action === 'claim_available') {
+        await fryConversionHandler.handleClaimAvailableButton(interaction, ticketId);
+    } else if (action === 'view_claim_status') {
+        await fryConversionHandler.handleViewClaimStatusButton(interaction, ticketId);
+    } else if (action === 'next_claim_info') {
+        await fryConversionHandler.handleNextClaimInfoButton(interaction, ticketId);
+    } else if (action === 'view_claim_history') {
+        await fryConversionHandler.handleViewClaimHistoryButton(interaction, ticketId);
+    } else if (action === 'conversion_summary') {
+        await fryConversionHandler.handleConversionSummaryButton(interaction, ticketId);
     }  
     else if (action === 'close_ticket_now') {
         // ticketId is already determined by the fallback logic at the beginning of the function

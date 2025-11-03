@@ -127,13 +127,48 @@ function getTicketActionRow(ticketInfo) {
  * @returns {string} The formatted number string.
  */
 function formatNumberWithCommas(number, decimalPlaces = 0) {
-    return number.toLocaleString('en-US', {
+    // Ensure number is a valid number, default to 0 if null or undefined
+    const num = typeof number === 'number' ? number : 0;
+    return num.toLocaleString('en-US', {
         minimumFractionDigits: decimalPlaces,
         maximumFractionDigits: decimalPlaces
     });
 }
 
+/**
+ * Safely parse JSON-like input.
+ * Accepts already-parsed objects, JSON strings, or null/undefined.
+ * Returns parsed object on success, or null on failure.
+ * Logs the raw value at info level when parsing fails (per project choice).
+ * @param {any} value
+ * @param {object} [options] optional { label: string } used in logs
+ * @returns {object|null}
+ */
+function parseJsonSafe(value, options = {}) {
+    const { label } = options;
+    if (value === null || value === undefined) return null;
+    // If it's already an object/array, return as-is
+    if (typeof value === 'object') return value;
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch (err) {
+            // Log the raw DB value at info level as requested
+            logger.info(`Failed to parse JSON for ${label || 'value'}. Raw value:`, value);
+            return null;
+        }
+    }
+    // Unknown type: attempt to coerce to string then parse
+    try {
+        return JSON.parse(String(value));
+    } catch (err) {
+        logger.info(`Failed to parse JSON for ${label || 'value'} (after coercion). Raw value:`, value);
+        return null;
+    }
+}
+
 module.exports = {
     getTicketActionRow,
-    formatNumberWithCommas
+    formatNumberWithCommas,
+    parseJsonSafe
 };

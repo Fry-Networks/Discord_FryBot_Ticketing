@@ -10,6 +10,28 @@ const ERROR_MESSAGES = {
     GENERAL: '⚠️ Please check your input and try again.'
 };
 
+const { MessageFlags } = require('discord.js');
+
+/**
+ * Handles sending a validation error message back to the user.
+ * @param {import('discord.js').Interaction} interaction - The interaction to reply to.
+ * @param {string} errorMessage - The specific error message to display.
+ */
+async function handleValidationError(interaction, errorMessage) {
+    if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({
+            content: errorMessage,
+            flags: MessageFlags.Ephemeral
+        });
+    } else {
+        await interaction.reply({
+            content: errorMessage,
+            flags: MessageFlags.Ephemeral
+        });
+    }
+}
+
 module.exports = {
-    ERROR_MESSAGES
+    ERROR_MESSAGES,
+    handleValidationError
 };

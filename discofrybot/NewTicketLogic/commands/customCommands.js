@@ -1,6 +1,7 @@
 const { ChannelType, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonStyle, PermissionsBitField, ButtonBuilder } = require('discord.js');
 const supabase = require('../supabaseClient'); // Import supabase client
 const supabaseHandler = require('../handlers/supabaseHandler');
+const inactivityPinger = require('../modules/inactivityPinger');
 const { getTicketActionRow } = require('../utils/ticketUtils');
 const logger = require('../utils/logger');
 const config = require('../utils/config');
@@ -501,6 +502,215 @@ const customCommands = [
                 } catch {
                     await message.reply({ content: '⚠️ An unexpected error occurred while adding the buttons.' });
                 }
+            }
+        },
+    },
+    {
+        name: 'conversionstatus',
+        description: 'Automatically detects conversion status and adds appropriate stage-specific buttons to a ticket.',
+        execute: async (message, args) => {
+            const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+            const fryConversionHandler = require('../handlers/fryConversionHandler');
+            const STAFF_ROLE_ID = config.staffRoleId;
+            const INTERN_ROLE_ID = config.internRoleId;
+
+            if (!message.member || (!message.member.roles.cache.has(STAFF_ROLE_ID) && !message.member.roles.cache.has(INTERN_ROLE_ID))) {
+                try {
+                    await message.reply({ content: "❌ You don't have permission to use this command.", flags: MessageFlags.Ephemeral });
+                } catch {
+                    await message.reply("❌ You don't have permission to use this command.");
+                }
+                return;
+            }
+
+            const channel = message.channel;
+            const channelName = channel?.name;
+
+            if (!channelName) {
+                try {
+                    await message.reply({ content: '⚠️ Could not determine channel name.', flags: MessageFlags.Ephemeral });
+                } catch {
+                    await message.reply('⚠️ Could not determine channel name.');
+                }
+                return;
+            }
+
+            const ticketMatch = channelName.match(/^(?:ticket|closed)-(\d+)-|^(\d+)-/);
+            const ticketId = ticketMatch ? (ticketMatch[1] || ticketMatch[2]) : null;
+
+            if (!ticketId) {
+                try {
+                    await message.reply({ content: '⚠️ This command can only be used in a ticket channel.', flags: MessageFlags.Ephemeral });
+                } catch {
+                    await message.reply({ content: '⚠️ This command can only be used in a ticket channel.' });
+                }
+                return;
+            }
+
+            try {
+                // Get the ticket to find the Algorand address
+                const ticket = await supabaseHandler.getTicketById(ticketId);
+                if (!ticket) {
+                    try {
+                        await message.reply({ content: `⚠️ Could not find ticket with ID \`${ticketId}\`.`, flags: MessageFlags.Ephemeral });
+                    } catch {
+                        await message.reply({ content: `⚠️ Could not find ticket with ID \`${ticketId}\`.` });
+                    }
+                    return;
+                }
+
+                let algorandAddress = ticket.algorand_address;
+                
+                // If no address in ticket, check if one was provided as an argument
+                if (!algorandAddress || algorandAddress === 'N/A') {
+                    if (args.length > 0) {
+                        algorandAddress = args[0];
+                    } else {
+                        try {
+                            await message.reply({ content: '⚠️ No Algorand address found in ticket. Please provide one as an argument: `!conversionstatus <algorand_address>`', flags: MessageFlags.Ephemeral });
+                        } catch {
+                            await message.reply({ content: '⚠️ No Algorand address found in ticket. Please provide one as an argument: `!conversionstatus <algorand_address>`' });
+                        }
+                        return;
+                    }
+                }
+
+                // Use the new automated conversion status detection
+                const { statusMessage, buttonComponents, progressData } = await fryConversionHandler.getConversionStatusAndButtons(algorandAddress, ticketId, ticket.user_id);
+                
+                // Send the status message
+                await channel.send({ content: statusMessage });
+                
+                // Send the stage-specific buttons if any
+                if (buttonComponents && buttonComponents.length > 0) {
+                    await channel.send({ 
+                        content: '**Conversion Actions:**', 
+                        components: buttonComponents 
+                    });
+                }
+
+                // Update ticket with the address if it was provided as argument
+                if (args.length > 0 && algorandAddress !== ticket.algorand_address) {
+                    await supabaseHandler.updateTicket(ticketId, { algorand_address: algorandAddress });
+                    logger.info(`Updated ticket ${ticketId} with Algorand address: ${algorandAddress}`);
+                }
+
+                logger.info(`Added automated conversion status and buttons to ticket ${ticketId} for address ${algorandAddress}.`);
+                try {
+                    await message.reply({ content: `✅ Added automated conversion status and stage-specific buttons for \`${algorandAddress}\` to ticket \`${ticketId}\`.`, flags: MessageFlags.Ephemeral });
+                } catch {
+                    await message.reply({ content: `✅ Added automated conversion status and stage-specific buttons for \`${algorandAddress}\` to ticket \`${ticketId}\`.` });
+                }
+
+            } catch (error) {
+                logger.error(`Error executing conversionstatus command for ticket ${ticketId}: ${error.message}`, error);
+                try {
+                    await message.reply({ content: '⚠️ An unexpected error occurred while checking conversion status and adding buttons.', flags: MessageFlags.Ephemeral });
+                } catch {
+                    await message.reply({ content: '⚠️ An unexpected error occurred while checking conversion status and adding buttons.' });
+                }
+            }
+        },
+    },
+    {
+        name: 'inactivity',
+        description: 'Run or preview the inactivity check. Usage: !inactivity scan|run|ticket <id> [--force]',
+        execute: async (message, args) => {
+            const STAFF_ROLE_ID = config.staffRoleId;
+            const ADMIN_ROLE_ID = config.adminRoleId;
+            const client = message.client;
+            const isStaff = message.member && message.member.roles.cache.has(STAFF_ROLE_ID);
+            const isAdmin = message.member && message.member.roles.cache.has(ADMIN_ROLE_ID);
+            const replyEphemeral = async (text) => {
+                try { await message.reply({ content: text, flags: MessageFlags.Ephemeral }); } catch { await message.reply(text); }
+            };
+
+            const sub = (args[0] || 'scan').toLowerCase();
+            const force = args.includes('--force') || args.includes('-f');
+
+            try {
+                if (sub === 'scan') {
+                    if (!isStaff && !isAdmin) return replyEphemeral("❌ You don't have permission to run this.");
+                    const inactiveTickets = await supabaseHandler.getInactiveTicketsRpc();
+                    const filtered = (inactiveTickets || []).filter(t => !t.ignore_inactivity);
+                    const summaryLines = filtered.slice(0, 25).map(t => {
+                        const role = t.last_message_from_role || 'unknown';
+                        const lastMsg = t.last_message_at || 'N/A';
+                        const pings = `user:${t.inactivity_ping_count||0} staff:${t.staff_ping_count||0}`;
+                        return `• id:${t.id} channel:${t.channel_id} role:${role} last:${lastMsg} pings:${pings}`;
+                    });
+                    await replyEphemeral(`✅ Inactivity scan found ${filtered.length} tickets (showing up to 25):\n${summaryLines.join('\n')}`);
+                    return;
+                }
+
+                if (sub === 'run') {
+                    if (!isAdmin) return replyEphemeral('❌ Only admins can execute the inactivity run.');
+                    if (!force) return replyEphemeral('⚠️ This will send pings and may auto-close tickets. Re-run with `--force` to confirm.');
+                    const inactiveTickets = await supabaseHandler.getInactiveTicketsRpc();
+                    const filtered = (inactiveTickets || []).filter(t => !t.ignore_inactivity);
+                    await replyEphemeral(`✅ Executing inactivity run on ${filtered.length} ticket(s). Processing sequentially...`);
+                    for (const t of filtered) {
+                        await new Promise(r => setTimeout(r, 1000));
+                        try {
+                            const now = Date.now();
+                            const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+                            if (t.last_message_from_role === 'staff') {
+                                const pingCount = t.inactivity_ping_count || 0;
+                                const lastUserPingAt = t.last_inactivity_ping_at ? new Date(t.last_inactivity_ping_at).getTime() : 0;
+                                const timeSinceLastUserPing = now - lastUserPingAt;
+                                if (pingCount === 0 && (now - new Date(t.last_message_at).getTime()) >= TWENTY_FOUR_HOURS_MS) {
+                                    await inactivityPinger.pingUserForInactivity(client, t);
+                                } else if (pingCount === 1 && timeSinceLastUserPing >= TWENTY_FOUR_HOURS_MS) {
+                                    await inactivityPinger.pingUserForInactivity(client, t);
+                                } else if (pingCount >= 2 && timeSinceLastUserPing >= TWENTY_FOUR_HOURS_MS) {
+                                    await inactivityPinger.autoCloseInactiveTicket(client, t);
+                                }
+                            } else if (t.last_message_from_role === 'user') {
+                                const staffPingCount = t.staff_ping_count || 0;
+                                const lastStaffPingAt = t.last_staff_ping_at ? new Date(t.last_staff_ping_at).getTime() : 0;
+                                const timeSinceLastStaffPing = now - lastStaffPingAt;
+                                if (staffPingCount === 0 && (now - new Date(t.last_message_at).getTime()) >= TWENTY_FOUR_HOURS_MS) {
+                                    await inactivityPinger.pingModeratorForInactivity(client, t);
+                                } else if (staffPingCount === 1 && timeSinceLastStaffPing >= TWENTY_FOUR_HOURS_MS) {
+                                    await inactivityPinger.pingModeratorForInactivity(client, t);
+                                }
+                            } else {
+                                logger.info(`Skipping ticket ${t.id} due to unknown last_message_from_role: ${t.last_message_from_role}`);
+                            }
+                        } catch (ticketErr) {
+                            logger.error(`Failed to process ticket ${t.id} in manual run: ${ticketErr.message}`, ticketErr);
+                        }
+                    }
+                    await replyEphemeral('✅ Inactivity run finished. Check logs for details.');
+                    return;
+                }
+
+                if (sub === 'ticket') {
+                    if (!isStaff && !isAdmin) return replyEphemeral("❌ You don't have permission to run this.");
+                    const target = args[1];
+                    if (!target) return replyEphemeral('⚠️ Please provide a ticket id or channel id. Usage: `!inactivity ticket <ticketId|channelId> [--force]`');
+                    let ticket = await supabaseHandler.getTicketById(target);
+                    if (!ticket) ticket = await supabaseHandler.getTicketByChannelId(target);
+                    if (!ticket) return replyEphemeral(`⚠️ Could not find ticket for "${target}".`);
+                    const willAutoClose = ticket.last_message_from_role === 'staff' && (ticket.inactivity_ping_count || 0) >= 2;
+                    if (willAutoClose && !isAdmin && !force) {
+                        return replyEphemeral('⚠️ This ticket would be auto-closed by this action. Re-run with `--force` (admins only) or ask an admin to run it.');
+                    }
+                    if (ticket.last_message_from_role === 'staff') {
+                        await inactivityPinger.pingUserForInactivity(client, ticket);
+                    } else if (ticket.last_message_from_role === 'user') {
+                        await inactivityPinger.pingModeratorForInactivity(client, ticket);
+                    } else {
+                        return replyEphemeral('⚠️ Ticket role status unknown; nothing to do.');
+                    }
+                    await replyEphemeral(`✅ Performed inactivity action for ticket ${ticket.id}.`);
+                    return;
+                }
+
+                await replyEphemeral('⚠️ Unknown subcommand. Usage: `!inactivity scan|run|ticket <id> [--force]`');
+            } catch (err) {
+                logger.error('Error executing inactivity command:', err);
+                await replyEphemeral('⚠️ Error while executing inactivity command. Check logs.');
             }
         },
     },

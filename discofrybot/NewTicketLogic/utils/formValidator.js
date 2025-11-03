@@ -5,9 +5,9 @@ const { ERROR_MESSAGES } = require('./validationErrorManager'); // Adjusted path
 
 const PREFIXES = [
     'BM','ISM','OSM','IDM','ODM','HWM','LWM',
-    'IHAQM','ILAQM','OHAQM','IRM','OHWQM','OLWQM',
+    'IHAQM','ILAQM','OHAQM','IMAQM','IRM','OHWQM','OLWQM',
     'EM','AOWSCM','AIWSCM','AOWCM','AIWCM',
-    'AOSCM','AISCM','AOTCM','AITCM','RDN','SVN','SDN'
+    'AOSCM','AISCM','AOTCM','AITCM','RDN','SVN','SDN','AEM'
   ];
 
 const SINGLE_MINER_KEY_REGEX = `(?:${PREFIXES.join('|')})-[A-Z0-9]{31,33}`;
@@ -68,7 +68,7 @@ const ticketFields = {
     rewards: ['contact_info', 'minerkeys', 'order_number', 'algorand_address', 'description'],
     tech_support: ['contact_info', 'minerkeys', 'order_number', 'algorand_address', 'description'],
     node_forgo_return: ['contact_info', 'order_number', 'orders_quantities', 'algorand_address'],
-    fry_conversion_issues: ['contact_info', 'algorand_address', 'minerkeys', 'description']
+    fry_conversion_issues: ['contact_info', 'algorand_address', 'description']
 };
 
 // Sanitization + Validation Functions
@@ -269,5 +269,6 @@ module.exports = {
     baseFields,
     ticketFields,
     validateTicketSubmission,
-    VALIDATION_PATTERNS // Exporting patterns might be useful for other modules if needed
+    VALIDATION_PATTERNS, // Exporting patterns might be useful for other modules if needed
+    sanitizeAndValidateAlgorandAddress // Export the specific function
 };

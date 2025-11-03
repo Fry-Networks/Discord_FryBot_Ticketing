@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
-const checkBalances = require('../../balanceCheck');
+const { SlashCommandBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
+const { reportCurrentBalances } = require('../../balanceCheck');
 const config = require('../utils/config'); // For staff role IDs
 const logger = require('../utils/logger');
 
@@ -21,9 +21,8 @@ module.exports = [
             }
 
             try {
-                // Call the checkBalances function, passing the client from the interaction
-                // The checkBalances function will send messages to the LOW_BAL_CHANNEL_ID
-                await checkBalances(interaction.client);
+                // Call the reportCurrentBalances function to send a direct balance report
+                await reportCurrentBalances(interaction.client);
                 logger.info(`Manual balance check triggered by ${interaction.user.tag}`);
                 await interaction.editReply({ content: '✅ Balance check triggered successfully. Results will be posted in the designated balance alert channel.' });
             } catch (error) {

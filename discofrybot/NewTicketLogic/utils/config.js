@@ -43,6 +43,12 @@ const config = {
     ticketModRoleId: process.env.TICKET_MOD_ROLE, // For ticket-specific moderation, like channel view
     ticketAdminRoleId: process.env.TICKET_ADMIN_ROLE, // For ticket administration role
 
+    // Feature toggles
+    inactivityMonitoringEnabled: process.env.INACTIVITY_MONITORING_ENABLED === 'true',
+
+    // Logging
+    logChannelId: process.env.LOG_CHANNEL_ID || null,
+
     // Panel setup command name (can be configured if needed)
     ticketPanelCommand: 'setup-ticket-panel',
     // Command name for manual balance check
@@ -61,6 +67,10 @@ const config = {
 
     // Burn Wallet Address
     BURN_WALLET_ADDRESS: process.env.BURN_WALLET_ADDRESS,
+
+    // Burn transaction detection settings (defaults can be overridden via .env)
+    BURN_TX_LOOKBACK_DAYS: 180, // How many days back to search for burn TXs
+    BURN_TX_MIN_AMOUNT: 100, // Minimum FRY amount to consider (helps ignore PoC 0.x transfers)
 
     // Algod URL for Algorand network calls
     ALGOD_API_URL: process.env.ALGOD_API_URL,

@@ -3,6 +3,7 @@ const supabase = require('../supabaseClient');
 const logger = require('../utils/logger');
 const axios = require('axios');
 const config = require('../utils/config');
+const { formatNumberWithCommas } = require('../utils/ticketUtils');
 
 /**
  * Checks if a user already has an open ticket.
@@ -303,6 +304,30 @@ async function updateTicket(ticketId, updates) {
 
 
 /**
+ * Deletes a ticket by its ID.
+ * @param {string|number} ticketId - The ID of the ticket to delete.
+ * @returns {Promise<void>}
+ */
+async function deleteTicket(ticketId) {
+    try {
+        const { error } = await supabase
+            .from('tickets')
+            .delete()
+            .eq('id', ticketId);
+
+        if (error) {
+            logger.error(`Error deleting ticket ${ticketId}: ${error.message}`, error);
+            throw error;
+        }
+        logger.info(`Ticket ${ticketId} deleted after failed channel creation.`);
+    } catch (err) {
+        logger.error(`Exception deleting ticket ${ticketId}: ${err.message}`, err);
+        throw err;
+    }
+}
+
+
+/**
  * Calls the Supabase RPC function to get tickets due for scheduled closure.
  * @returns {Promise<object|null>} An array of due tickets or null on error.
  */
@@ -527,7 +552,7 @@ async function checkConversionEligibility(algorandAddress) {
     logger.info(`Checking conversion eligibility for Algorand address: ${algorandAddress}`);
     try {
         const { data, error } = await supabase
-            .from('conversion_eligibility') // Query the new table
+            .from('conversion_eligibility_mirror') // Query the new table
             .select('*') // Select all columns to get detailed breakdown
             .eq('address', algorandAddress)
             .maybeSingle();
@@ -631,85 +656,90 @@ async function getLockedAlgoBalance(address) {
  * @param {number} timeframeDays - The number of days back from now to check for transactions.
  * @returns {Promise<Array<object>>} An array of matching burn transaction details (txID, amount), or empty array if none found.
  */
-async function checkBurnTransaction(senderAddress, eligibleAmount, timeframeDays = 7) {
-    // logger.info(`Checking burn transactions for ${senderAddress} within last ${timeframeDays} days, matching eligible amount ${eligibleAmount}`);
+async function checkBurnTransaction(senderAddress, eligibleAmount, timeframeDays = 7, minAmount = 0) {
+    // timeframeDays: how many days back to look
+    // minAmount: if >0, accept transactions with sentAmount >= minAmount (in FRY units)
     const burnTransactions = [];
 
     try {
-        // First, verify the account exists by checking account info
-        // logger.debug(`Verifying account exists: ${senderAddress}`);
-        const accountResponse = await axios.get(`https://mainnet-api.algonode.cloud/v2/accounts/${senderAddress}`);
-        // logger.debug(`Account verification successful for ${senderAddress}`);
+        // Verify account exists
+        await axios.get(`https://mainnet-api.algonode.cloud/v2/accounts/${senderAddress}`);
 
-        // Try without any time filter first to see if we can get any transactions
-        // logger.debug(`Fetching recent transactions for address ${senderAddress} (no time filter)`);
-        
-        let response;
-        try {
-            response = await axios.get(
-                `https://mainnet-api.algonode.cloud/v2/accounts/${senderAddress}/transactions`,
-                {
-                    params: {
-                        'limit': 1000
-                    }
-                }
-            );
-        } catch (txError) {
-            // If transactions endpoint fails, try the indexer API instead
-            logger.warn(`Standard transactions API failed, trying indexer API for ${senderAddress}`);
-            response = await axios.get(
-                `https://mainnet-idx.algonode.cloud/v2/accounts/${senderAddress}/transactions`,
-                {
-                    params: {
-                        'limit': 1000
-                    }
-                }
-            );
-        }
-        
-        const transactions = response.data.transactions;
-        // logger.debug(`Found ${transactions.length} total transactions for ${senderAddress}`);
-
-        // Calculate timeframe for filtering
+        // Prepare pagination loop. Prefer indexer endpoint which supports pagination tokens.
+        const indexerBase = `https://mainnet-idx.algonode.cloud/v2/accounts/${senderAddress}/transactions`;
+        let nextToken = null;
         const now = new Date();
         const timeframeDaysAgo = new Date(now.getTime() - (timeframeDays * 24 * 60 * 60 * 1000));
-        const timeframeCutoff = Math.floor(timeframeDaysAgo.getTime() / 1000); // Convert to Unix timestamp
+        const timeframeCutoff = Math.floor(timeframeDaysAgo.getTime() / 1000); // Unix timestamp
+        const amountTolerance = 0.000001; // tolerance for matching eligibleAmount
+        const maxPages = 50; // safety cap to avoid runaway pagination
+        let pageCount = 0;
+        let keepPaging = true;
 
-        const amountTolerance = 0.000001; // Small tolerance for floating point comparisons
+        while (keepPaging && pageCount < maxPages) {
+            pageCount += 1;
+            const params = { limit: 1000 };
+            if (nextToken) params.next = nextToken;
 
-        for (const tx of transactions) {
-            // Check if transaction is within timeframe (round-time is Unix timestamp)
-            if (tx['round-time'] && tx['round-time'] < timeframeCutoff) {
-                continue; // Skip transactions older than timeframe
-            }
-
-            // Check if it's an asset transfer for FRY 1.0 and sent to the burn wallet
-            if (tx['tx-type'] === 'axfer' && 
-                tx['asset-transfer-transaction'] && 
-                tx['asset-transfer-transaction']['asset-id'] === config.ASSET_ID_FRY1 &&
-                tx['asset-transfer-transaction'].receiver === config.BURN_WALLET_ADDRESS) {
-                
-                const sentAmount = tx['asset-transfer-transaction'].amount / 1_000_000; // Convert from microunits to full units
-                
-              //  logger.debug(`Found FRY burn transaction: ${tx.id}, amount: ${sentAmount}, eligible: ${eligibleAmount}, timestamp: ${tx['round-time']}`);
-
-                // Check if the sent amount is close to the eligible amount
-                if (Math.abs(sentAmount - eligibleAmount) < amountTolerance) {
-                    burnTransactions.push({
-                        txID: tx.id,
-                        amount: sentAmount,
-                        timestamp: tx['round-time'] // Unix timestamp of the round
-                    });
+            let response;
+            try {
+                response = await axios.get(indexerBase, { params });
+            } catch (err) {
+                // If indexer fails, fallback to the non-indexer transactions endpoint for a single page and stop paging
+                logger.warn(`Indexer transactions endpoint failed for ${senderAddress} (page ${pageCount}), falling back to standard transactions endpoint: ${err.message}`);
+                try {
+                    response = await axios.get(`https://mainnet-api.algonode.cloud/v2/accounts/${senderAddress}/transactions`, { params: { limit: 1000 } });
+                    // After fallback single page, do not attempt further pages
+                    nextToken = null;
+                    keepPaging = false;
+                } catch (innerErr) {
+                    logger.error(`Both indexer and standard transactions endpoints failed for ${senderAddress}: ${innerErr.message}`, innerErr);
+                    break;
                 }
             }
+
+            const transactions = response.data.transactions || [];
+            // If no transactions, end
+            if (!transactions.length) break;
+
+            for (const tx of transactions) {
+                // If tx has round-time and it's older than cutoff, we can stop processing further older transactions
+                if (tx['round-time'] && tx['round-time'] < timeframeCutoff) {
+                    keepPaging = false;
+                    break;
+                }
+
+                if (tx['tx-type'] === 'axfer' &&
+                    tx['asset-transfer-transaction'] &&
+                    tx['asset-transfer-transaction']['asset-id'] === config.ASSET_ID_FRY1 &&
+                    tx['asset-transfer-transaction'].receiver === config.BURN_WALLET_ADDRESS) {
+
+                    const sentAmount = tx['asset-transfer-transaction'].amount / 1_000_000;
+
+                    if (minAmount && sentAmount >= minAmount) {
+                        burnTransactions.push({
+                            txID: tx.id,
+                            amount: sentAmount,
+                            timestamp: tx['round-time']
+                        });
+                    } else if (!minAmount && eligibleAmount && Math.abs(sentAmount - eligibleAmount) < amountTolerance) {
+                        burnTransactions.push({
+                            txID: tx.id,
+                            amount: sentAmount,
+                            timestamp: tx['round-time']
+                        });
+                    }
+                }
+            }
+
+            // Determine next token for pagination (indexer uses 'next-token' or 'next' depending on provider)
+            nextToken = response.data['next-token'] || response.data.next || null;
+            if (!nextToken) keepPaging = false;
         }
-        
-       // logger.info(`Found ${burnTransactions.length} matching burn transactions for ${senderAddress}`);
-        
+
     } catch (error) {
         if (error.response) {
             logger.error(`Axios Error for burn transactions (${senderAddress}): Status ${error.response.status}, Data:`, error.response.data);
-            // If it's a 404, the account might not exist or have no transactions
             if (error.response.status === 404) {
                 logger.error(`Account ${senderAddress} not found or has no transactions`);
             }
@@ -719,7 +749,354 @@ async function checkBurnTransaction(senderAddress, eligibleAmount, timeframeDays
             logger.error(`Axios Error for burn transactions (${senderAddress}): Request setup error. Message:`, error.message);
         }
     }
+
     return burnTransactions;
+}
+
+/**
+ * Fetches conversion status from the conversion_eligibility_mirror table.
+ * @param {string} algorandAddress - The Algorand address to check.
+ * @returns {Promise<object>} An object with mirror data or null if not found.
+ */
+async function getConversionMirrorStatus(algorandAddress) {
+    logger.info(`Checking conversion mirror status for Algorand address: ${algorandAddress}`);
+    try {
+        const { data, error } = await supabase
+            .from('conversion_eligibility_mirror')
+            .select('*')
+            .eq('address', algorandAddress)
+            .maybeSingle();
+
+        if (error) {
+            logger.error(`Error checking conversion mirror status for ${algorandAddress}: ${error.message}`, error);
+            return { found: false, error: error.message };
+        }
+
+        if (data) {
+            return { found: true, data: data };
+        } else {
+            return { found: false, data: null };
+        }
+    } catch (err) {
+        logger.error(`Exception in getConversionMirrorStatus for ${algorandAddress}: ${err.message}`, err);
+        return { found: false, error: err.message };
+    }
+}
+
+/**
+ * Calculates the current vesting status based on mirror data and current date.
+ * @param {object} mirrorData - Data from conversion_eligibility_mirror table.
+ * @param {Date} currentDate - Current date (defaults to now).
+ * @returns {object} Vesting status information.
+ */
+function calculateVestingStatus(mirrorData, currentDate = new Date()) {
+    const vestingStart = new Date('2025-08-01T00:00:00.000Z');
+    const vestingEnd = new Date('2026-07-01T00:00:00.000Z');
+    
+    // Calculate months since vesting started
+    const monthsDiff = (currentDate.getFullYear() - vestingStart.getFullYear()) * 12 + 
+                      (currentDate.getMonth() - vestingStart.getMonth());
+    
+    // Current vesting month (1-12, capped)
+    const currentVestingMonth = Math.min(Math.max(monthsDiff + 1, 1), 12);
+    
+    // Parse data from mirror table
+    const claimedMonths = parseInt(mirrorData.claimedmonths) || 0;
+    const claimableAmount = parseFloat(mirrorData.claimableamount) || 0;
+    const pendingAmount = parseFloat(mirrorData.pendingamount) || 0;
+    const totalAmount = parseFloat(mirrorData.amount) || 0;
+    
+    // Calculate status
+    const monthsAvailableToClaim = Math.max(currentVestingMonth - claimedMonths, 0);
+    const isFullyClaimed = claimedMonths >= currentVestingMonth;
+    const isConversionComplete = claimedMonths >= 12;
+    
+    // Calculate next claim date
+    let nextClaimDate = null;
+    if (!isConversionComplete && currentVestingMonth < 12) {
+        const nextMonth = currentVestingMonth + 1; // vesting month index (1..12)
+        if (nextMonth <= 12) {
+            // Vesting months map as:
+            // 1 -> Aug 2025, 2 -> Sep 2025, ..., 5 -> Dec 2025,
+            // 6 -> Jan 2026, ..., 12 -> Jul 2026
+            const nextClaimYear = nextMonth <= 5 ? 2025 : 2026;
+            const nextClaimMonth = nextMonth + 7; // Aug = 1 + 7 => 8, etc.
+            // JS Date month is 0-based; use modulo to wrap into 0-11 range
+            nextClaimDate = new Date(nextClaimYear, (nextClaimMonth - 1) % 12, 1);
+        }
+    }
+    
+    return {
+        currentVestingMonth,
+        totalMonths: 12,
+        claimedMonths,
+        claimableAmount,
+        pendingAmount,
+        totalAmount,
+        isFullyClaimed,
+        isConversionComplete,
+        monthsAvailableToClaim,
+        nextClaimDate,
+        vestingStarted: currentDate >= vestingStart,
+        vestingEnded: currentDate >= vestingEnd
+    };
+}
+
+/**
+ * Determines the conversion stage based on mirror data and vesting status.
+ * @param {object} mirrorData - Data from conversion_eligibility_mirror table.
+ * @param {object} vestingStatus - Calculated vesting status.
+ * @returns {object} Stage information with stage number and description.
+ */
+function determineConversionStage(mirrorData, vestingStatus) {
+    const status = mirrorData.status;
+    const assetId = mirrorData.asset_id;
+    const { isConversionComplete, isFullyClaimed, claimedMonths, monthsAvailableToClaim } = vestingStatus;
+    
+    if (!status && !assetId) {
+        return {
+            stage: 0,
+            name: 'Not Started',
+            description: 'User has not started the conversion process'
+        };
+    }
+    
+    if (status === 'valid' && assetId === '924268058') {
+        return {
+            stage: 1,
+            name: 'Eligibility Checked',
+            description: 'User has checked eligibility but not initiated conversion'
+        };
+    }
+    
+    if (status === 'pending' && monthsAvailableToClaim > 0) {
+        return {
+            stage: 2,
+            name: 'Conversion Initiated',
+            description: 'User has initiated conversion and has claimable amounts'
+        };
+    }
+    
+    if (claimedMonths > 0 && !isFullyClaimed) {
+        return {
+            stage: 3,
+            name: 'Partially Claimed',
+            description: 'User has claimed some months but is behind current vesting schedule'
+        };
+    }
+    
+    if (isFullyClaimed && !isConversionComplete) {
+        return {
+            stage: 4,
+            name: 'Fully Claimed (Current)',
+            description: 'User is up to date with current vesting schedule'
+        };
+    }
+    
+    if (isConversionComplete) {
+        return {
+            stage: 5,
+            name: 'Conversion Complete',
+            description: 'User has claimed all 12 months of vesting'
+        };
+    }
+    
+    // Default fallback
+    return {
+        stage: 1,
+        name: 'Unknown Status',
+        description: 'Unable to determine exact conversion stage'
+    };
+}
+
+/**
+ * Gets comprehensive conversion progress for an address.
+ * @param {string} algorandAddress - The Algorand address to check.
+ * @param {Date} currentDate - Current date (defaults to now).
+ * @returns {Promise<object>} Complete conversion progress information.
+ */
+async function getConversionProgress(algorandAddress, currentDate = new Date()) {
+    try {
+        // Get mirror data
+        const mirrorResult = await getConversionMirrorStatus(algorandAddress);
+        
+        if (!mirrorResult.found) {
+            return {
+                found: false,
+                stage: { stage: 0, name: 'Not Started', description: 'Not eligible for conversion' },
+                vestingStatus: null,
+                mirrorData: null,
+                eligibilityData: null,
+                error: mirrorResult.error
+            };
+        }
+        
+        // Calculate vesting status
+        const vestingStatus = calculateVestingStatus(mirrorResult.data, currentDate);
+        
+        // Determine stage
+        const stage = determineConversionStage(mirrorResult.data, vestingStatus);
+
+        // Additional: Detect on-chain burn TXs that are NOT yet reflected in the mirror.
+        // We will NOT modify any DB records here — only detect and return the data so callers can notify staff.
+        let hasUnregisteredBurn = false;
+        let unregisteredBurnTxs = [];
+
+        try {
+            // Only run burn detection when the mirror exists but status does not indicate 'pending' (i.e., conversion not initiated)
+            const mirrorStatus = mirrorResult.data?.status;
+            const eligibleAmount = parseFloat(mirrorResult.data?.amount) || 0;
+
+            if (mirrorStatus !== 'pending' && eligibleAmount > 0) {
+                // Use configured lookback and min amount defaults
+                const lookbackDays = config.BURN_TX_LOOKBACK_DAYS || 180;
+                const minAmount = config.BURN_TX_MIN_AMOUNT || 100;
+
+                // checkBurnTransaction(senderAddress, eligibleAmount, timeframeDays = 7, minAmount = 0)
+                const burnTxs = await checkBurnTransaction(algorandAddress, eligibleAmount, lookbackDays, minAmount);
+
+                if (Array.isArray(burnTxs) && burnTxs.length > 0) {
+                    hasUnregisteredBurn = true;
+                    unregisteredBurnTxs = burnTxs;
+                }
+            }
+        } catch (burnCheckErr) {
+            logger.warn(`Burn detection failed for ${algorandAddress}: ${burnCheckErr.message}`);
+            // Do not fail the whole progress check if burn detection fails; proceed without marking.
+        }
+                
+        return {
+            found: true,
+            stage,
+            vestingStatus,
+            mirrorData: mirrorResult.data,
+            eligibilityData: null,
+            error: null,
+            // supplemental fields for callers
+            hasUnregisteredBurn,
+            unregisteredBurnTxs
+        };
+        
+    } catch (err) {
+        logger.error(`Exception in getConversionProgress for ${algorandAddress}: ${err.message}`, err);
+        return {
+            found: false,
+            stage: null,
+            vestingStatus: null,
+            mirrorData: null,
+            eligibilityData: null,
+            error: err.message
+        };
+    }
+}
+
+/**
+ * Generates a stage-specific status message for the user.
+ * @param {string} algorandAddress - The Algorand address.
+ * @param {object} progressData - Complete progress data from getConversionProgress.
+ * @returns {string} Formatted status message.
+ */
+function generateConversionStatusMessage(algorandAddress, progressData) {
+    const { stage, vestingStatus, mirrorData } = progressData;
+    
+    if (!progressData.found) {
+        return `❌ **Conversion Status Check**\n\nYour Algorand address \`${algorandAddress}\` was not found in the conversion eligibility data. Please verify your address or check if you had FRY 1.0 holdings on December 1st, 2024.`;
+    }
+    
+    const currentDate = new Date();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    let message = '';
+    
+    switch (stage.stage) {
+        case 0:
+            message = `🔍 **Conversion Status - Not Started**\n\n` +
+                     `📍 **Your Address**: \`${algorandAddress}\`\n` +
+                     `✅ **Eligibility**: Confirmed eligible for conversion\n` +
+                     `💰 **Total Eligible**: ${mirrorData ? parseFloat(mirrorData.amount).toLocaleString() : 'Unknown'} FRY 1.0\n\n` +
+                     `🚀 **Next Steps**:\n` +
+                     `1. Visit the Fry Dashboard to check your eligibility\n` +
+                     `2. Choose your conversion option (FRY 2.0 or fNode)\n` +
+                     `3. Send your FRY 1.0 to the burn wallet\n\n` +
+                     `📅 **Vesting Info**: Conversion unlocks 1/12th monthly starting August 1st, 2025`;
+            break;
+            
+        case 1:
+            message = `✅ **Conversion Status - Eligibility Confirmed**\n\n` +
+                     `📍 **Your Address**: \`${algorandAddress}\`\n` +
+                     `💰 **Total Eligible**: ${parseFloat(mirrorData.amount).toLocaleString()} FRY 1.0\n` +
+                     `🎯 **Status**: Eligibility confirmed, ready to convert\n\n` +
+                     `🚀 **Next Steps**:\n` +
+                     `1. Choose your conversion option (FRY 2.0 at 80:1 or fNode at 40:1)\n` +
+                     `2. Send your FRY 1.0 to the burn wallet via the dashboard\n` +
+                     `3. Return to claim your converted tokens\n\n` +
+                     `📅 **Vesting**: Starts August 1st, 2025 (1/12th monthly)\n\n` +
+                     `ℹ️ If you have recently sent FRY 1.0 to the burn wallet, you can click the **Check Burn TX** button below to verify the transaction.`;
+            break;
+            
+        case 2:
+        case 3:
+            const monthName = monthNames[currentDate.getMonth()];
+            const year = currentDate.getFullYear();
+            message = `🪙 **Conversion Status - Month ${vestingStatus.currentVestingMonth} of 12**\n\n` +
+                     `📅 **Current Period**: ${monthName} ${year} (Month ${vestingStatus.currentVestingMonth})\n` +
+                     `🎯 **Your Progress**:\n` +
+                     `- Claimed: ${vestingStatus.claimedMonths}/${vestingStatus.currentVestingMonth} months ${vestingStatus.isFullyClaimed ? '✅' : '⚠️'}\n`;
+            
+            // Determine converted token type
+            let convertedTokenType = 'tokens'; // Default
+            const totalConvertedAmount = vestingStatus.claimableAmount * 12;
+            const tolerance = 0.001; // Small tolerance for floating point comparison
+
+            if (Math.abs(totalConvertedAmount * 80 - vestingStatus.totalAmount) < tolerance) {
+                convertedTokenType = 'FRY 2.0';
+            } else if (Math.abs(totalConvertedAmount * 40 - vestingStatus.totalAmount) < tolerance) {
+                convertedTokenType = 'fNode';
+            }
+
+            if (vestingStatus.monthsAvailableToClaim > 0) {
+                message += `- **Available to claim: ${vestingStatus.monthsAvailableToClaim} month(s)**\n` +
+                          `- Claimable amount: ${formatNumberWithCommas(vestingStatus.claimableAmount, 6)} ${convertedTokenType}\n\n` +
+                          `🚀 **Action Required**: Visit the dashboard to claim your pending month(s)!`;
+            } else {
+                message += `- Available to claim: 0 months\n\n` +
+                          `✅ **Status**: You're up to date! ${vestingStatus.nextClaimDate ? `Next claim available: ${vestingStatus.nextClaimDate.toLocaleDateString()}` : 'All months claimed!'}`;
+            }
+            
+            message += `\n\n💰 **Amounts**:\n` +
+                      `- Total eligible: ${formatNumberWithCommas(vestingStatus.totalAmount, 6)} FRY 1.0\n` +
+                      `- Remaining: ${formatNumberWithCommas(vestingStatus.pendingAmount, 6)} FRY 1.0 (${12 - vestingStatus.claimedMonths} months)\n` +
+                      `*Note: The "Remaining" amount refers to FRY 1.0 still to be converted as vesting unlocks. The full eligible FRY 1.0 amount was required to be sent in one transaction at the beginning of the conversion process.*`;
+            break;
+                        
+        case 4:
+            message = `✅ **Conversion Status - Fully Up to Date**\n\n` +
+                     `📅 **Current Period**: Month ${vestingStatus.currentVestingMonth} of 12\n` +
+                     `🎯 **Your Progress**: ${vestingStatus.claimedMonths}/${vestingStatus.currentVestingMonth} months claimed ✅\n\n` +
+                     `🎉 **Great job!** You're fully up to date with the vesting schedule.\n\n`;
+            
+            if (vestingStatus.nextClaimDate) {
+                message += `🗓️ **Next Claim**: ${vestingStatus.nextClaimDate.toLocaleDateString()} (Month ${vestingStatus.currentVestingMonth + 1})`;
+            } else {
+                message += `🏁 **Conversion Complete**: All 12 months have been claimed!`;
+            }
+            break;
+            
+        case 5:
+            message = `🏁 **Conversion Complete!**\n\n` +
+                     `📅 **Final Status**: All 12 months claimed ✅\n` +
+                     `💰 **Total Converted**: ${vestingStatus.totalAmount.toLocaleString()} FRY 1.0\n\n` +
+                     `🎉 **Congratulations!** Your FRY 1.0 conversion is now complete.\n` +
+                     `You can view your complete claim history in the dashboard.`;
+            break;
+            
+        default:
+            message = `❓ **Conversion Status - Unknown**\n\n` +
+                     `We couldn't determine your exact conversion stage. Please contact support for assistance.`;
+    }
+    
+    return message;
 }
 
 module.exports = {
@@ -732,6 +1109,7 @@ module.exports = {
     getTicketById,
     getUserById, // Export function to get user by ID
     updateTicket, // Export update function to update ticket
+    deleteTicket, // Export delete function for cleanup scenarios
     getDueScheduledTicketsRpc, // Export function to get due scheduled tickets
     incrementMessageCount, // Export function to increment message count
     getTicketByChannelId, // Export function to get ticket by channel ID
@@ -743,5 +1121,10 @@ module.exports = {
     checkBurnTransaction, // Export function to check burn transaction
     updateTicketMessage, // Export function to update ticket message
     getLockedAlgoBalance, // Export function to get locked ALGO balance
-    deleteTicketMessage // Export function to delete ticket message
+    deleteTicketMessage, // Export function to delete ticket message
+    getConversionMirrorStatus, // Export function to get conversion mirror status
+    calculateVestingStatus, // Export function to calculate vesting status
+    determineConversionStage, // Export function to determine conversion stage
+    getConversionProgress, // Export function to get comprehensive conversion progress
+    generateConversionStatusMessage // Export function to generate status messages
 };

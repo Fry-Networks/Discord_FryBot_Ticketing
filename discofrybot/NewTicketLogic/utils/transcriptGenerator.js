@@ -115,6 +115,18 @@ async function generateTranscriptHTML(ticketId, username) {
                     </div>
                 </div>
             `;
+        } else if (embedObj.title) {
+            content = `
+                <div class="form-embed">
+                    <div class="embed-title"><strong>${escapeHTML(embedObj.title)}</strong></div>
+                    ${embedObj.fields?.map(f => `
+                        <div class="form-field">
+                            <strong>${escapeHTML(f.name)}:</strong>
+                            <span>${escapeHTML(f.value)}</span>
+                        </div>
+                    `).join('') || ''}
+                </div>
+            `;
         }
         // Add logic to handle regular content, including code blocks, AFTER form-embed checks
         else if ((user.content && user.content.trim() !== "") || (msg.content && msg.content.trim() !== "")) {
