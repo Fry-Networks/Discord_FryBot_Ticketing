@@ -197,8 +197,8 @@ export async function checkStaffRoleServerSide(userId: string): Promise<boolean>
     .eq('user_id', userId)
     .single()
 
- // console.log('checkStaffRoleServerSide tokenRow:', tokenRow);
-  console.log('checkStaffRoleServerSide tokenError:', tokenError);
+  // console.log('checkStaffRoleServerSide tokenRow:', tokenRow);
+  // console.log('checkStaffRoleServerSide tokenError:', tokenError);
 
   if (tokenError || !tokenRow?.access_token) {
     await logger.warn(`Missing access token for user ${maskedUserId}`, 'checkStaffRole')
@@ -250,7 +250,7 @@ export async function checkStaffRoleServerSide(userId: string): Promise<boolean>
     headers: { Authorization: `Bearer ${accessToken}` }
   })
 
-  console.log('checkStaffRoleServerSide Discord API response status:', discordRes.status);
+  // console.log('checkStaffRoleServerSide Discord API response status:', discordRes.status);
 
   if (!discordRes.ok) {
     const errorText = await discordRes.text()
@@ -259,8 +259,17 @@ export async function checkStaffRoleServerSide(userId: string): Promise<boolean>
   }
 
   const member = await discordRes.json()
-  console.log('checkStaffRoleServerSide Discord member roles:', member.roles);
-  const roles: string[] = member.roles ?? []
+  // console.log('checkStaffRoleServerSide Discord member roles:', member.roles);
+   const roles: string[] = member.roles ?? []
+  const username = member.user?.username ?? 'Unknown'
+  const discriminator = member.user?.discriminator ?? ''
+  const discordTag = discriminator ? `${username}#${discriminator}` : username
+
+  await logger.info(
+    `Login attempt by ${discordTag} (${maskedUserId}) with roles: ${roles.join(', ')}`,
+    'checkStaffRole'
+  )
+
   const authorized = roles.includes(STAFF_ROLE_ID) || roles.includes(INTERN_ROLE_ID)
 
   if (authorized) {
@@ -269,7 +278,7 @@ export async function checkStaffRoleServerSide(userId: string): Promise<boolean>
   } else {
     await logger.warn(`User ${maskedUserId} lacks staff role`, 'checkStaffRole')
   }
-  console.log('checkStaffRoleServerSide final authorized:', authorized);
+  // console.log('checkStaffRoleServerSide final authorized:', authorized);
 
   return authorized
 }

@@ -338,40 +338,6 @@ export default function AnalyticsClient() {
       </div>
 
       <div className="pt-8">
-        <h2 className="text-xl font-semibold mb-1 text-white">Claimed Tickets</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Object.entries(data.claimedBreakdown)
-            .sort((a, b) => b[1] - a[1]) // sort descending by total claims
-            .map(([username, total]) => (
-              <div key={username} className="flex flex-col gap-2 p-4 bg-white/5 rounded-xl border shadow">
-                <div className="flex items-center gap-4">
-                  <img
-                    src={data.claimedAvatars[username] || 'https://cdn.discordapp.com/embed/avatars/0.png'}
-                    alt={username}
-                    className="w-10 h-10 rounded-full border border-slate-600"
-                  />
-                  <div>
-                    <div className="text-sm text-white font-medium">{username}</div>
-                    <div className="text-sm text-gray-400">{total} total claimed</div>
-                  </div>
-                </div>
-
-                <div className="pl-14 text-xs text-gray-400 space-y-1">
-                  {(['live', 'ticketsbot', 'tickettool'] as const).map((source) => {
-                    const count = data.claimedBySource[source]?.[username] || 0;
-                    return count > 0 ? (
-                      <div key={source}>
-                        {source.charAt(0).toUpperCase() + source.slice(1)}: {count}
-                      </div>
-                    ) : null;
-                  })}
-                </div>
-              </div>
-            ))}
-        </div>
-      </div>
-
-      <div className="pt-8">
         <h2 className="text-xl font-semibold mb-2 text-white">Closed Tickets Distribution</h2>
         <div className="rounded-xl bg-white/5 p-6 shadow border flex flex-col lg:flex-row gap-6 items-start">
           
@@ -408,6 +374,40 @@ export default function AnalyticsClient() {
           </div>
         </div>
       </div>
+      <div className="pt-8">
+        <h2 className="text-xl font-semibold mb-1 text-white">Claimed Tickets</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Object.entries(data.claimedBreakdown)
+            .sort((a, b) => b[1] - a[1]) // sort descending by total claims
+            .map(([username, total]) => (
+              <div key={username} className="flex flex-col gap-2 p-4 bg-white/5 rounded-xl border shadow">
+                <div className="flex items-center gap-4">
+                  <img
+                    src={data.claimedAvatars[username] || 'https://cdn.discordapp.com/embed/avatars/0.png'}
+                    alt={username}
+                    className="w-10 h-10 rounded-full border border-slate-600"
+                  />
+                  <div>
+                    <div className="text-sm text-white font-medium">{username}</div>
+                    <div className="text-sm text-gray-400">{total} total claimed</div>
+                  </div>
+                </div>
+
+                <div className="pl-14 text-xs text-gray-400 space-y-1">
+                  {(['live', 'ticketsbot', 'tickettool'] as const).map((source) => {
+                    const count = data.claimedBySource[source]?.[username] || 0;
+                    return count > 0 ? (
+                      <div key={source}>
+                        {source.charAt(0).toUpperCase() + source.slice(1)}: {count}
+                      </div>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+
       <div className="pt-8">
         <h2 className="text-xl font-semibold mb-2 text-white">Claim Distribution (Tracking since 01/20/2025)</h2>
         <div className="rounded-xl bg-white/5 p-6 shadow border flex flex-col lg:flex-row gap-6 items-start">
