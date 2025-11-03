@@ -11,6 +11,7 @@ services:
       - ./logs:/app/logs
     networks:
       - frynet
+    user: node  
 
   fry-dashboard:
     build:
@@ -20,7 +21,8 @@ services:
     restart: unless-stopped
     networks:
       - frynet
-  
+    user: node  
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
@@ -34,4 +36,5 @@ services:
       
 networks:
   frynet:
+    name: frynet
     driver: bridge

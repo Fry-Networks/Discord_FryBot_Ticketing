@@ -10,6 +10,9 @@ RUN npm install
 COPY . .
 # Build the app
 RUN npm run build
+# Add these two lines:
+RUN chown -R node:node /app  # Own the app dir
+USER node  # Switch to non-root user for runtime
 # Expose port
 EXPOSE 3000
 # Start the server
