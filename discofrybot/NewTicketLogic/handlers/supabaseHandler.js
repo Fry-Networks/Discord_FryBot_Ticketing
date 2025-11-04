@@ -6,24 +6,213 @@ const config = require('../utils/config');
 const { formatNumberWithCommas } = require('../utils/ticketUtils');
 
 /**
- * Checks if a user already has an open ticket.
- * @param {string} userId - The Discord user ID.
- * @returns {Promise<object|null>} The existing ticket object or null.
+ * Checks if a Discord channel exists.
+ * @param {import('discord.js').Client} client - The Discord client.
+ * @param {string} channelId - The Discord channel ID.
+ * @returns {Promise<boolean>} True if the channel exists, false otherwise.
  */
-async function checkActiveTicket(userId) {
+async function channelExists(client, channelId) {
+    if (!channelId) return false;
+    
+    try {
+        const channel = await client.channels.fetch(channelId);
+        return !!channel;
+    } catch (error) {
+        if (error.code === 10003) { // Unknown Channel
+            return false;
+        }
+        logger.warn(`Error checking if channel ${channelId} exists: ${error.message}`);
+        return false; // Assume it doesn't exist on any error
+    }
+}
+
+
+/**
+ * Cleans up a single orphaned ticket (simple version for individual ticket cleanup).
+ * @param {string} ticketId - The ID of the ticket to clean up.
+ * @param {string} reason - The reason for cleanup.
+ * @returns {Promise<void>}
+ */
+async function cleanupOrphanedTicket(ticketId, reason = 'Channel not found') {
+    try {
+        const { error } = await supabase
+            .from('tickets')
+            .update({ 
+                status: 'closed',
+                closed_at: new Date().toISOString(),
+                closed_by_id: 'SYSTEM',
+                closed_by_username: 'SYSTEM_CLEANUP',
+                description: reason
+            })
+            .eq('id', ticketId);
+
+        if (error) {
+            logger.error(`Error cleaning up orphaned ticket ${ticketId}: ${error.message}`, error);
+            throw error;
+        }
+
+        await logBotActivity('info', 'orphaned_ticket_cleanup', `Cleaned up orphaned ticket ${ticketId}: ${reason}`);
+        logger.info(`Orphaned ticket ${ticketId} cleaned up: ${reason}`);
+    } catch (err) {
+        logger.error(`Exception cleaning up orphaned ticket ${ticketId}: ${err.message}`, err);
+        throw err;
+    }
+}
+
+/**
+ * Calls the Supabase RPC function to perform comprehensive orphaned tickets cleanup.
+ * Handles both stale 'creating' tickets and orphaned 'open' tickets without channel_id.
+ * This is more efficient than the JavaScript-based cleanup as it runs server-side.
+ * @returns {Promise<Array<object>>} Array of cleanup results.
+ */
+async function cleanupOrphanedTicketsRpc() {
+    try {
+        const { data, error } = await supabase.rpc('cleanup_orphaned_tickets');
+
+        if (error) {
+            logger.error(`Error calling cleanup_orphaned_tickets RPC: ${error.message}`, error);
+            throw error;
+        }
+
+        const results = data || [];
+        logger.info(`cleanup_orphaned_tickets RPC completed. Results: ${results.length} actions taken.`);
+        
+        // Log detailed results
+        let totalCleaned = 0;
+        results.forEach(result => {
+            if (result.action === 'cleanup_summary') {
+                totalCleaned = result.tickets_affected;
+                logger.info(`Orphaned tickets cleanup summary: ${result.tickets_affected} total tickets cleaned`);
+            } else if (result.ticket_id) {
+                logger.info(`Cleaned up ticket ${result.ticket_id} (${result.action}): ${result.reason}`);
+            }
+        });
+
+        return { results, totalCleaned };
+    } catch (err) {
+        logger.error(`Exception calling cleanup_orphaned_tickets RPC: ${err.message}`, err);
+        throw err;
+    }
+}
+
+/**
+ * Application-level fallback cleanup to run when the RPC fails.
+ * @param {import('discord.js').Client} client - Discord client for channel verification.
+ * @returns {Promise<{results: Array<object>, totalCleaned: number, method: string}>}
+ */
+async function cleanupOrphanedTicketsFallback(client = null) {
+    logger.warn('Falling back to application-level orphaned ticket cleanup.');
+
+    const { data: tickets, error } = await supabase
+        .from('tickets')
+        .select('id, channel_id, status, created_at')
+        .in('status', ['open', 'creating']);
+
+    if (error) {
+        logger.error(`Fallback cleanup failed to fetch tickets: ${error.message}`, error);
+        throw error;
+    }
+
+    const results = [];
+    let cleaned = 0;
+    const now = Date.now();
+
+    for (const ticket of tickets || []) {
+        let reason = null;
+
+        // Missing channel_id after grace period
+        if (!ticket.channel_id) {
+            const ageMs = now - new Date(ticket.created_at).getTime();
+            const gracePeriodMs = 5 * 60 * 1000; // 5 minutes
+            if (ticket.status === 'creating' && ageMs < gracePeriodMs) {
+                continue; // allow active creations to finish
+            }
+            reason = 'Missing channel reference';
+        } else if (client) {
+            const exists = await channelExists(client, ticket.channel_id);
+            if (!exists) {
+                reason = 'Discord channel missing';
+            }
+        }
+
+        if (!reason) continue;
+
+        await cleanupOrphanedTicket(ticket.id, reason);
+        cleaned++;
+        results.push({ ticket_id: ticket.id, action: 'application_cleanup', reason });
+    }
+
+    return { results, totalCleaned: cleaned, method: 'fallback' };
+}
+
+/**
+ * Attempts to run the RPC-based cleanup, falling back to the application-level cleanup
+ * when specific errors (like SQL ambiguity) occur.
+ * @param {import('discord.js').Client} client
+ */
+async function cleanupOrphanedTickets(client = null) {
+    try {
+        const result = await cleanupOrphanedTicketsRpc();
+        return { ...result, method: 'rpc' };
+    } catch (error) {
+        if (error?.code === '42702') {
+            logger.warn('cleanup_orphaned_tickets RPC failed with ambiguous column error. Falling back to local cleanup.');
+            return cleanupOrphanedTicketsFallback(client);
+        }
+        throw error;
+    }
+}
+
+/**
+ * Enhanced version that checks if a user has an open ticket AND verifies the Discord channel exists.
+ * If an orphaned ticket is found, it's automatically cleaned up.
+ * @param {string} userId - The Discord user ID.
+ * @param {import('discord.js').Client} client - The Discord client (optional, for channel verification).
+ * @returns {Promise<object|null>} The existing valid ticket object or null.
+ */
+async function checkActiveTicket(userId, client = null) {
     try {
         const { data, error } = await supabase
             .from('tickets')
-            .select('id, ticket_type, channel_id')
+            .select('id, ticket_type, channel_id, created_at')
             .eq('user_id', userId)
-            .eq('status', 'open') // Assuming 'open' is the status for active tickets
+            .eq('status', 'open')
             .maybeSingle();
 
         if (error) {
             logger.error(`Error checking active ticket for user ${userId}: ${error.message}`, error);
-            throw error; // Re-throw to be handled by the caller
+            throw error;
         }
-        return data; // Returns the ticket object if found, or null otherwise
+
+        if (!data) {
+            return null; // No active ticket found
+        }
+
+        // If client is provided, verify the channel exists
+        if (client && data.channel_id) {
+            const exists = await channelExists(client, data.channel_id);
+            if (!exists) {
+                logger.warn(`Found orphaned ticket ${data.id} for user ${userId} - channel ${data.channel_id} does not exist`);
+                
+                // Cleanup the orphaned ticket
+                await cleanupOrphanedTicket(data.id, 'Discord channel not found during active ticket check');
+                
+                // Return null as the ticket is no longer valid
+                return null;
+            }
+        } else if (!data.channel_id) {
+            // If no channel_id is set, this is likely an orphaned ticket from failed creation
+            logger.warn(`Found ticket ${data.id} for user ${userId} with no channel_id - likely orphaned`);
+            
+            // Check if it's a very recent ticket (less than 5 minutes old) - give it some time
+            const ticketAge = Date.now() - new Date(data.created_at).getTime();
+            if (ticketAge > 5 * 60 * 1000) { // 5 minutes
+                await cleanupOrphanedTicket(data.id, 'No channel_id set after 5+ minutes');
+                return null;
+            }
+        }
+
+        return data; // Returns the valid ticket object
     } catch (err) {
         logger.error(`Exception in checkActiveTicket for user ${userId}: ${err.message}`, err);
         throw err;
@@ -41,7 +230,7 @@ async function insertTicket(ticketData) {
             user_id: ticketData.user_id,
             discord_username: ticketData.discord_username,
             ticket_type: ticketData.ticket_type,
-            status: 'open',
+            status: ticketData.status || 'open', // Allow custom status
             full_name: ticketData.full_name || 'N/A',
             email: ticketData.email || 'N/A',
             description: ticketData.description || 'N/A',
@@ -52,6 +241,13 @@ async function insertTicket(ticketData) {
             orders_quantities: ticketData.orders_quantities || null, // Added new field
             bold_sign_signed: false, // Added new field, default to false
             selected_region: ticketData.selected_region || null, // Added new field
+            // Flxtime Partners Support fields
+            solana_wallet_address: ticketData.solana_wallet_address || 'N/A', // Added Solana wallet address field
+            flxtime_validated: false, // Default to false
+            flxtime_validated_by: null, // No validator initially
+            aem_key_issued: null, // No AEM key initially  
+            aem_key_issued_at: null, // No issue timestamp initially
+            aem_key_issued_by: null, // No issuer initially
         };
 
         const { data, error } = await supabase
@@ -230,8 +426,8 @@ async function getTicketById(ticketId) {
     try {
         const { data, error } = await supabase
             .from('tickets')
-            .select('id, is_transcribed, user_id, channel_id, discord_username, scheduled_close_at, original_message_id, claimed_by, claimed_by_username, validated, registration_waived, ticket_type, status, full_name, email, description, order_number, algorand_address, minerkeys, request_type, orders_quantities, bold_sign_signed, selected_region, created_at, closed_at, original_category_id, transcript_preference, sn_picture_confirmed, factory_reset_picture_confirmed, validated_by, program_status, coupon_code, forgo_return_message_ids, closed_by_username, closed_by_id, last_staff_member_id, last_message_at, last_message_from_role, inactivity_ping_count, last_inactivity_ping_at, staff_ping_count, last_staff_ping_at, ignore_inactivity') 
-            // Select necessary columns including user_id, channel_id, discord_username, scheduled_close_at, claimed_by, validated, registration_waived, and other relevant fields
+            .select('id, is_transcribed, user_id, channel_id, discord_username, scheduled_close_at, original_message_id, claimed_by, claimed_by_username, validated, registration_waived, ticket_type, status, full_name, email, description, order_number, algorand_address, minerkeys, request_type, orders_quantities, bold_sign_signed, selected_region, created_at, closed_at, original_category_id, transcript_preference, sn_picture_confirmed, factory_reset_picture_confirmed, validated_by, program_status, coupon_code, forgo_return_message_ids, closed_by_username, closed_by_id, last_staff_member_id, last_message_at, last_message_from_role, inactivity_ping_count, last_inactivity_ping_at, staff_ping_count, last_staff_ping_at, ignore_inactivity, solana_wallet_address, flxtime_validated, flxtime_validated_by, aem_key_issued, aem_key_issued_at, aem_key_issued_by') 
+            // Select necessary columns including user_id, channel_id, discord_username, scheduled_close_at, claimed_by, validated, registration_waived, and Flxtime fields
             .eq('id', ticketId)
             .maybeSingle(); // Changed to .maybeSingle()
 
@@ -302,6 +498,48 @@ async function updateTicket(ticketId, updates) {
     }
 }
 
+/**
+ * Logs a staff action associated with a ticket.
+ * @param {string|number} ticketId - The related ticket ID.
+ * @param {string} staffId - The Discord ID of the staff member.
+ * @param {string} action - Description of the action taken.
+ * @returns {Promise<object|null>} The inserted log entry or null on error.
+ */
+async function logStaffAction(ticketId, staffId, action) {
+    const numericTicketId = typeof ticketId === 'string' ? parseInt(ticketId, 10) : ticketId;
+
+    if (Number.isNaN(numericTicketId)) {
+        const errorMessage = `logStaffAction called with invalid ticketId: ${ticketId}`;
+        logger.error(errorMessage);
+        throw new Error(errorMessage);
+    }
+
+    try {
+        const record = {
+            ticket_id: numericTicketId,
+            staff_id: staffId,
+            action,
+            timestamp: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('staff_actions')
+            .insert([record])
+            .select()
+            .maybeSingle();
+
+        if (error) {
+            logger.error(`Error logging staff action for ticket ${ticketId}: ${error.message}`, error);
+            throw error;
+        }
+
+        logger.info(`Logged staff action for ticket ${ticketId} by ${staffId}: ${action}`);
+        return data;
+    } catch (err) {
+        logger.error(`Exception in logStaffAction for ticket ${ticketId}: ${err.message}`, err);
+        throw err;
+    }
+}
 
 /**
  * Deletes a ticket by its ID.
@@ -1136,7 +1374,10 @@ module.exports = {
     incrementMessageCount, // Export function to increment message count
     getTicketByChannelId, // Export function to get ticket by channel ID
     logBotActivity, // Export function for logging bot activity
+    logStaffAction, // Export function to log staff actions
     getInactiveTicketsRpc, // Export RPC function
+    cleanupOrphanedTicketsRpc, // Export RPC function for cleaning up orphaned tickets
+    cleanupOrphanedTickets, // Export combined cleanup (RPC + fallback)
     getFlxtimeTicketsNeedingReminderRpc, // Export RPC function for Flxtime reminders
     checkConversionEligibility, // Export function to check conversion eligibility
     getFry1Balance, // Export function to get FRY 1.0 balance

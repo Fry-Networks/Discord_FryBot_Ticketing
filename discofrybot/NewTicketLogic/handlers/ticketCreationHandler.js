@@ -66,8 +66,8 @@ async function handleTicketModalSubmit(interaction, ticketType) {
     logger.info(`Validation successful for ${ticketType} ticket by ${user.id}. Proceeding with creation.`);
 
     try {
-        // 3. Check for existing active ticket
-        const existingTicket = await supabaseHandler.checkActiveTicket(user.id);
+        // 3. Check for existing active ticket (with channel verification)
+        const existingTicket = await supabaseHandler.checkActiveTicket(user.id, interaction.client);
         if (existingTicket) {
             logger.info(`User ${user.id} attempted to open a new ticket while having an active one (${existingTicket.id}).`);
             return interaction.editReply({
@@ -117,12 +117,12 @@ async function handleTicketModalSubmit(interaction, ticketType) {
             return interaction.editReply({ content: '⚠️ Ticket queue is currently full. Please try again soon or ping a moderator — the team has been notified in logs.', flags: MessageFlags.Ephemeral });
         }
 
-        // 5. Prepare and insert ticket into Supabase
+        // 5. Prepare and insert ticket into Supabase with "creating" status
         const ticketRecord = {
             user_id: user.id,
             discord_username: user.username,
             ticket_type: ticketType,
-            status: 'open',
+            status: 'creating', // Use 'creating' status initially
             full_name: validatedData.fullName || 'N/A',
             email: validatedData.email || 'N/A',
             description: validatedData.description || 'N/A',
@@ -135,7 +135,7 @@ async function handleTicketModalSubmit(interaction, ticketType) {
 
         const newTicket = await supabaseHandler.insertTicket(ticketRecord);
         const ticketId = newTicket.id;
-        logger.info(`Ticket ${ticketId} created in DB for user ${user.id}.`);
+        logger.info(`Ticket ${ticketId} created in DB with 'creating' status for user ${user.id}.`);
 
         // 6. Upsert user info
         await supabaseHandler.upsertUser({
@@ -222,7 +222,12 @@ async function handleTicketModalSubmit(interaction, ticketType) {
             return interaction.editReply({ content: errorMessage, flags: MessageFlags.Ephemeral });
         }
 
-        await supabaseHandler.updateTicketChannelId(ticketId, ticketChannel.id);
+        // Update ticket with channel ID and mark as properly "open"
+        await supabaseHandler.updateTicket(ticketId, {
+            channel_id: ticketChannel.id,
+            status: 'open'
+        });
+        logger.info(`Ticket ${ticketId} successfully opened with channel ${ticketChannel.id}`);
 
         // 8. Send initial embed and action buttons
         const embedFieldsData = [];

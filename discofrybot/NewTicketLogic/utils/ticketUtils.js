@@ -69,7 +69,7 @@ function getTicketActionRow(ticketInfo) {
             flxtimeComponents.push(
                 new ButtonBuilder()
                     .setCustomId(`aem_key_issued_label:${ticketInfo.id}`)
-                    .setLabel('🔑 Key Issued')
+                    .setLabel('🔑 AEM Key Issued')
                     .setStyle(ButtonStyle.Success)
                     .setDisabled(true)
             );

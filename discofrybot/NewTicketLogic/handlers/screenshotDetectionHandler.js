@@ -5,11 +5,19 @@ const logger = require('../utils/logger');
 const supabaseHandler = require('./supabaseHandler');
 const flxtimePartnersHandler = require('./flxtimePartnersHandler');
 
+let isInitialized = false;
+
 /**
  * Initializes the screenshot detection handler for Flxtime Partners Support tickets
  * @param {import('discord.js').Client} client - The Discord client instance
  */
 function initializeScreenshotDetection(client) {
+    if (isInitialized) {
+        logger.info('Screenshot detection handler already initialized. Skipping duplicate registration.');
+        return;
+    }
+    isInitialized = true;
+
     client.on(Events.MessageCreate, async (message) => {
         try {
             // SECURITY: Only process messages from real users (not bots)

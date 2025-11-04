@@ -1,10 +1,28 @@
 # ✅ Task Tracker – Discord Ticketing Rewrite
 
 ## Active Tasks
+- [x] **Fix cleanup_orphaned_tickets RPC ambiguous user_id error** - Completed 11/4/2025
+  - Identified PostgreSQL error 42702 "column reference user_id is ambiguous" in cleanup_orphaned_tickets function
+  - Root cause: PostgreSQL couldn't distinguish between RETURNS TABLE user_id column and loop variable user_id field
+  - Solution: Redesigned function to use explicit variable assignment instead of RETURN QUERY SELECT statements
+  - Added proper table aliases (t.user_id, t.id, etc.) to eliminate column ambiguity
+  - Fixed incorrect column reference: bot_logs table uses 'timestamp' not 'created_at' 
+  - Renamed loop variable from 'ticket_record' to 'current_ticket' for clarity
+  - Function now executes successfully and cleaned up 16 orphaned tickets during testing
+  - Error no longer appears in bot terminal logs during 30-minute cleanup intervals
 - [x] **Switch balanceCheck from Fry 1 to tFRY monitoring** - Completed 11/3/2025
   - Remove all Fry1 monitoring and notifications completely
   - Enable tFRY monitoring with asset ID 2681521901
   - Fix missing 8-hour status notifications issue
+- [x] **Orphaned Tickets Bug Fix & Documentation Update** - Completed 11/3/2025
+  - Fixed critical orphaned tickets issue where users got "1 ticket already open" error with no visible channel
+  - Implemented transaction-safe ticket creation with "creating" → "open" status progression
+  - Added enhanced checkActiveTicket() with real-time channel verification and automatic cleanup
+  - Created comprehensive Supabase RPC function for automated orphaned ticket cleanup (every 30 minutes)
+  - Updated README.md to reflect current advanced features and architecture (9+ ticket types, FRY conversion, Flxtime Partners)
+  - Completely rewrote PLANNING.md to document actual system architecture and current capabilities
+  - Created comprehensive TROUBLESHOOTING.md guide with solutions for common issues
+  - Removed obsolete orphaned ticket functions and replaced with efficient RPC-based cleanup system
 - [x] Added ticket category for FLXtime users and automated AEM key generation after validation complete. - Completed 11/3/2025
 - [x] Enhanced messageFilter for scammer messages detection and disciplanary action. - Completed 11/3/2025
 - [x] Scaffold new Discord bot structure (break out `ticketSystem.js`) - Completed 5/12/25

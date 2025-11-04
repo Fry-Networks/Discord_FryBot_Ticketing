@@ -3,6 +3,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags
 const config = require('../utils/config');
 const logger = require('../utils/logger');
 const supabaseHandler = require('./supabaseHandler');
+const { getTicketActionRow } = require('../utils/ticketUtils');
 
 // MongoDB connection for device storage
 const { MongoClient } = require('mongodb');
@@ -141,7 +142,7 @@ async function handleValidationConfirmation(interaction, ticketId, confirmation)
             components: []
         });
 
-        // Send confirmation to ticket channel
+        // Send confirmation to ticket channel and update staff action buttons
         const ticket = await supabaseHandler.getTicketById(ticketId);
         if (ticket?.channel_id) {
             const channel = await interaction.client.channels.fetch(ticket.channel_id);
@@ -159,16 +160,43 @@ async function handleValidationConfirmation(interaction, ticketId, confirmation)
                     .setTimestamp();
 
                 await channel.send({ embeds: [validationEmbed] });
+
+                // Update the original staff action buttons to show "Issue AEM Key" button
+                if (ticket.original_message_id) {
+                    try {
+                        const updatedTicket = await supabaseHandler.getTicketById(ticketId); // Get fresh ticket data with validation status
+                        const actionRows = getTicketActionRow(updatedTicket);
+                        
+                        const originalMessage = await channel.messages.fetch(ticket.original_message_id);
+                        await originalMessage.edit({
+                            content: 'Staff Actions:',
+                            components: actionRows
+                        });
+                        logger.info(`Updated staff action buttons for ticket ${ticketId} after Flxtime validation`);
+                    } catch (updateError) {
+                        logger.error(`Failed to update staff action buttons for ticket ${ticketId}: ${updateError.message}`, updateError);
+                    }
+                }
             }
         }
 
         logger.info(`Flxtime partner validated successfully for ticket ${ticketId} by ${staffUsername}`);
     } catch (error) {
         logger.error(`Error confirming Flxtime validation for ticket ${ticketId}: ${error.message}`, error);
-        await interaction.followUp({
+        const errorResponse = {
             content: '⚠️ An error occurred while confirming the validation.',
             flags: MessageFlags.Ephemeral
-        });
+        };
+
+        try {
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorResponse);
+            } else {
+                await interaction.reply(errorResponse);
+            }
+        } catch (responseError) {
+            logger.error(`Failed to notify user about validation error for ticket ${ticketId}: ${responseError.message}`, responseError);
+        }
     }
 }
 
@@ -263,7 +291,7 @@ async function handleIssueAemKeyButton(interaction, ticketId) {
                     },
                     {
                         name: '🚀 Next Steps',
-                        value: '1. Save your AEM key in a secure location\n2. Use this key to register your AI Edge Miner device\n3. Start earning FRY rewards at 50% rate\n4. Contact support if you need help with setup',
+                        value: '1. Save your AEM key in a secure location\n2. Register your device following our [Dashboard Registration Guide](https://docs.frynetworks.com/dashboard/registration)\n3. Open a new ticket if you need help with setup',
                         inline: false
                     }
                 )
@@ -275,6 +303,25 @@ async function handleIssueAemKeyButton(interaction, ticketId) {
                 content: `${user}, your free AI Edge Miner key is ready! 🎉`,
                 embeds: [keyEmbed]
             });
+        }
+
+        // Refresh staff action buttons to show disabled "AEM Key Issued" label
+        try {
+            const refreshedTicket = await supabaseHandler.getTicketById(ticketId);
+            if (refreshedTicket?.channel_id && refreshedTicket.original_message_id) {
+                const ticketChannel = await interaction.client.channels.fetch(refreshedTicket.channel_id);
+                if (ticketChannel) {
+                    const originalMessage = await ticketChannel.messages.fetch(refreshedTicket.original_message_id);
+                    const actionRows = getTicketActionRow(refreshedTicket);
+                    await originalMessage.edit({
+                        content: 'Staff Actions:',
+                        components: actionRows
+                    });
+                    logger.info(`Updated staff action buttons for ticket ${ticketId} after issuing AEM key.`);
+                }
+            }
+        } catch (buttonUpdateError) {
+            logger.error(`Failed to update staff action buttons after issuing AEM key for ticket ${ticketId}: ${buttonUpdateError.message}`, buttonUpdateError);
         }
 
         await interaction.editReply({

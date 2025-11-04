@@ -36,6 +36,7 @@ function initializeTicketSystem(client, prefix) {
 
     // Initialize screenshot detection for Flxtime Partners Support tickets
     screenshotDetectionHandler.initializeScreenshotDetection(client);
+    logger.info('📸 Screenshot detection handler registered via ticket system.');
 
     // Add message listener to log messages in ticket channels
     client.on(Events.MessageCreate, async (message) => {
@@ -209,6 +210,23 @@ function initializeTicketSystem(client, prefix) {
     // });
 
     logger.info('NewTicketLogic System has been initialized and handlers are active.');
+
+    // --- Orphaned Ticket Cleanup (RPC-based) ---
+    // Run cleanup every 30 minutes using the efficient Supabase RPC function
+    setInterval(async () => {
+        try {
+            logger.info('Running periodic orphaned ticket cleanup via RPC...');
+            const { results, totalCleaned } = await supabaseHandler.cleanupOrphanedTicketsRpc();
+            
+            if (totalCleaned > 0) {
+                logger.info(`Orphaned ticket cleanup completed: ${totalCleaned} tickets cleaned`);
+            } else {
+                logger.info('Orphaned ticket cleanup completed: No orphaned tickets found');
+            }
+        } catch (error) {
+            logger.error(`Error during periodic orphaned ticket cleanup: ${error.message}`, error);
+        }
+    }, 30 * 60 * 1000); // Every 30 minutes
 
     // --- Inactivity Check Interval ---
     // Define the interval for checking inactivity (in milliseconds)

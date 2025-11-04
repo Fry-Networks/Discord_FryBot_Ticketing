@@ -85,7 +85,6 @@ const client = new Client({
 // Ticket system integration
 //const { registerTicketCommands, setupTicketPanel } = require('./ticketSystem');
 const { initializeTicketSystem } = require('./NewTicketLogic/ticketSystem');
-const { initializeScreenshotDetection } = require('./NewTicketLogic/handlers/screenshotDetectionHandler');
 // require('./Ticket-System/ticketClaimManager')(client);
 require('./balanceCheck')(client); // Initialize balance checking
 
@@ -151,8 +150,9 @@ client.on('messageCreate', async (message) => {
         // --- Tiered Actions based on suspicion type ---
 
         // Immediate action for high-risk patterns like Discord invites
-        if (detectionResult.type === 'discord_invite') {
-             logger.warn(`⚡ High-risk Discord invite detected. Taking immediate action.`);
+        if (detectionResult.type === 'discord_invite' || detectionResult.type === 'high_risk_domain') {
+             const highRiskLabel = detectionResult.type === 'discord_invite' ? 'Discord invite' : 'High-risk domain';
+             logger.warn(`⚡ ${highRiskLabel} detected. Taking immediate action.`);
              try {
                 // Delete the message
                 await message.delete();
@@ -161,7 +161,8 @@ client.on('messageCreate', async (message) => {
                 // Ban the user
                 const member = message.guild.members.cache.get(message.author.id);
                 if (member) {
-                    await member.ban({ reason: `Posting high-risk disallowed link (${detectionResult.type}).` });
+                    const banReasonDetails = detectionResult.domain ? `${detectionResult.type}:${detectionResult.domain}` : detectionResult.type;
+                    await member.ban({ reason: `Posting high-risk disallowed link (${banReasonDetails}).` });
                     logger.info(`✅ Banned user ${message.author.tag}.`);
                 } else {
                     logger.error(`❌ Could not find guild member for user ID ${message.author.id} to ban.`);
@@ -182,6 +183,10 @@ client.on('messageCreate', async (message) => {
                                 { name: 'Original Message', value: `\`\`\`${rawContent.substring(0, 1000)}${rawContent.length > 1000 ? '...' : ''}\`\`\`` },
                                 { name: 'Normalized Message', value: `\`\`\`${normalizedContent.substring(0, 1000)}${normalizedContent.length > 1000 ? '...' : ''}\`\`\`` },
                                 { name: 'Detected Pattern', value: `\`\`\`${detectionResult.pattern}\`\`\`` }
+                            )
+                            .addFields(
+                                ...(detectionResult.domain ? [{ name: 'Domain', value: detectionResult.domain, inline: true }] : []),
+                                ...(detectionResult.reason ? [{ name: 'Reason', value: detectionResult.reason, inline: true }] : [])
                             )
                             .setTimestamp();
                         await modAlertChannel.send({ embeds: [alertEmbed] });
@@ -438,11 +443,7 @@ client.once(Events.ClientReady, async () => {
     const prefix = '!'; // Define the command prefix
     initializeTicketSystem(client, prefix);
     logger.info('🔧 Ticket system initialized.');
-    
-    // Initialize screenshot detection for Flxtime Partners Support
-    initializeScreenshotDetection(client);
-    logger.info('📸 Screenshot detection initialized.');
-    
+        
     // Start Flxtime reminder system (check every 6 hours)
     setInterval(async () => {
         try {

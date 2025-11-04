@@ -147,6 +147,18 @@ function extractAndValidateUrls(normalizedMessage, guildId) { // Added guildId p
 
             // Check if the hostname is exactly the allowed domain or ends with .allowedDomain
             if (hostname !== allowedDomain && !hostname.endsWith('.' + allowedDomain)) {
+                const highRiskDomain = detectHighRiskDomain(hostname, potentialMatch, normalizedMessage);
+                if (highRiskDomain) {
+                    logger.warn(`High-risk domain detected (${highRiskDomain.reason}): ${hostname} from "${potentialMatch}"`);
+                    return {
+                        isSuspicious: true,
+                        type: 'high_risk_domain',
+                        domain: hostname,
+                        pattern: potentialMatch,
+                        reason: highRiskDomain.reason
+                    };
+                }
+
                 logger.warn(`Disallowed domain found: ${hostname} from potential match "${potentialMatch}"`);
                 return { isSuspicious: true, type: 'disallowed_domain', domain: hostname, pattern: potentialMatch }; // Found a disallowed domain
             }
@@ -291,6 +303,81 @@ function detectSuspiciousKeywords(normalizedMessage) {
                 }
             }
         }
+    }
+
+    return null;
+}
+
+/**
+ * Determines whether a disallowed domain should be treated as high-risk based on context.
+ * @param {string} hostname
+ * @param {string} matchedUrl
+ * @param {string} normalizedMessage
+ * @returns {{reason: string}|null}
+ */
+function detectHighRiskDomain(hostname, matchedUrl, normalizedMessage) {
+    const host = hostname.toLowerCase();
+    const message = normalizedMessage || '';
+    const link = (matchedUrl || '').toLowerCase();
+
+    const highRiskHostPatterns = [
+        'vercel.app',
+        'netlify.app',
+        'pages.dev',
+        'firebaseapp.com',
+        'appspot.com',
+        'github.io',
+        'notion.site',
+        'notion.so'
+    ];
+
+    const highRiskMessageTokens = [
+        'opensea',
+        'mint',
+        'airdrop',
+        'claim',
+        'reward',
+        'solana',
+        ' sol ',
+        'wallet',
+        'support',
+        'helpdesk',
+        'compensation',
+        'bonus',
+        'giveaway',
+        'verification'
+    ];
+
+    const highRiskPathTokens = [
+        'mint',
+        'airdrop',
+        'claim',
+        'reward',
+        'support',
+        'help',
+        'verify',
+        'promo',
+        'bonus',
+        'gift'
+    ];
+
+    const hostMatches = highRiskHostPatterns.some(pattern => host === pattern || host.endsWith(`.${pattern}`));
+    const messageTokenHit = highRiskMessageTokens.some(token => message.includes(token));
+    const pathTokenHit = highRiskPathTokens.some(token => link.includes(token));
+
+    const openSeaMintCombo = (message.includes('opensea') || link.includes('opensea')) &&
+        (message.includes('mint') || link.includes('mint'));
+
+    if ((hostMatches && (messageTokenHit || pathTokenHit)) || openSeaMintCombo) {
+        let reason = 'high_risk_domain';
+        if (hostMatches) {
+            const pattern = highRiskHostPatterns.find(pattern => host === pattern || host.endsWith(`.${pattern}`));
+            reason = `${pattern || 'high_risk_domain'}${openSeaMintCombo ? '_opensea_mint' : ''}`;
+        } else if (openSeaMintCombo) {
+            reason = 'opensea_mint_combo';
+        }
+
+        return { reason };
     }
 
     return null;
