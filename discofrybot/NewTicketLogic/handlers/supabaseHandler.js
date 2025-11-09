@@ -1251,6 +1251,52 @@ async function getConversionProgress(algorandAddress, currentDate = new Date()) 
 }
 
 /**
+ * Checks if a user has already received an AEM key from a previous Flxtime Partners ticket.
+ * @param {string} userId - The Discord user ID to check.
+ * @returns {Promise<object>} Object with hasKey boolean and previous ticket details if found.
+ */
+async function checkFlxtimeKeyHistory(userId) {
+    try {
+        logger.info(`Checking Flxtime AEM key history for user ${userId}`);
+        
+        const { data, error } = await supabase
+            .from('tickets')
+            .select('id, aem_key_issued, aem_key_issued_at, aem_key_issued_by, channel_id')
+            .eq('user_id', userId)
+            .eq('ticket_type', 'flxtime_partners_support')
+            .not('aem_key_issued', 'is', null)
+            .order('aem_key_issued_at', { ascending: true })
+            .limit(1);
+
+        if (error) {
+            logger.error(`Error checking Flxtime key history for user ${userId}: ${error.message}`, error);
+            return { hasKey: false, error: error.message };
+        }
+
+        if (data && data.length > 0) {
+            const previousTicket = data[0];
+            logger.info(`Found previous AEM key for user ${userId}: ticket ${previousTicket.id}, key: ${previousTicket.aem_key_issued}`);
+            return {
+                hasKey: true,
+                previousTicket: {
+                    id: previousTicket.id,
+                    keyIssued: previousTicket.aem_key_issued,
+                    issuedAt: previousTicket.aem_key_issued_at,
+                    issuedBy: previousTicket.aem_key_issued_by,
+                    channelId: previousTicket.channel_id
+                }
+            };
+        } else {
+            logger.info(`No previous AEM key found for user ${userId}`);
+            return { hasKey: false, previousTicket: null };
+        }
+    } catch (err) {
+        logger.error(`Exception in checkFlxtimeKeyHistory for user ${userId}: ${err.message}`, err);
+        return { hasKey: false, error: err.message };
+    }
+}
+
+/**
  * Generates a stage-specific status message for the user.
  * @param {string} algorandAddress - The Algorand address.
  * @param {object} progressData - Complete progress data from getConversionProgress.
@@ -1390,5 +1436,6 @@ module.exports = {
     calculateVestingStatus, // Export function to calculate vesting status
     determineConversionStage, // Export function to determine conversion stage
     getConversionProgress, // Export function to get comprehensive conversion progress
-    generateConversionStatusMessage // Export function to generate status messages
+    generateConversionStatusMessage, // Export function to generate status messages
+    checkFlxtimeKeyHistory // Export function to check Flxtime key history
 };

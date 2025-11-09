@@ -1,6 +1,30 @@
 # ✅ Task Tracker – Discord Ticketing Rewrite
 
 ## Active Tasks
+- [x] **Fix scam detection to work in forum channels and all nested channel types** - Completed 11/9/2025
+  - Enhanced channel detection logic in `discofrybot.js` to properly handle forum threads and nested structures
+  - Added `isChannelInMonitoredCategory()` function that checks direct parent, grandparent (for forum threads), and full parent chain
+  - Fixed issue where forum thread messages were being ignored because their parentId was the forum channel, not the category
+  - Now properly detects scams in: regular channels, forum threads, and any nested channel structures within the monitored category
+  - Improved logging to show channel type and parent hierarchy for better debugging
+- [x] **Fix balance checker 8-hour status notifications not triggering** - Completed 11/9/2025
+  - Fixed logic in `balanceCheck.js` where 8-hour status reports were only sent when all balances were safe
+  - Now always sends 8-hour status reports regardless of balance status
+  - Differentiated messaging: green "All systems running" vs orange "Issues detected" with asset details  
+  - Maintains proper separation between periodic status reports and immediate threshold alerts
+- [x] **Add completion prompt to FlxTime Partners after AEM key issuance (like Node Forgo system)** - Completed 11/9/2025
+  - Added "Close Ticket" vs "More Questions" prompt to FlxTime Partners workflow after AEM key issuance
+  - Mirrors the Node Forgo system completion flow for consistent user experience
+  - Uses existing conclude button handlers in interactionHandler.js
+  - Shows completion message with appropriate buttons after successful key delivery
+- [x] **Add safeguard to FlxTime Partners system to prevent duplicate AEM key issuance per user** - Completed 11/9/2025
+  - Implemented comprehensive duplicate key prevention system for FlxTime Partners
+  - Added `checkFlxtimeKeyHistory()` function in supabaseHandler.js to query for previous AEM key issuances
+  - Enhanced ticket creation flow to check for duplicates and notify users/admins
+  - Updated validation and key issuance handlers with duplicate detection
+  - Modified button logic to show appropriate UI for duplicate attempts
+  - Added admin notifications when duplicate attempts are detected
+  - System now prevents multiple AEM keys per user while maintaining clear communication
 - [x] **Fix cleanup_orphaned_tickets RPC ambiguous user_id error** - Completed 11/4/2025
   - Identified PostgreSQL error 42702 "column reference user_id is ambiguous" in cleanup_orphaned_tickets function
   - Root cause: PostgreSQL couldn't distinguish between RETURNS TABLE user_id column and loop variable user_id field

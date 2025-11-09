@@ -14,7 +14,7 @@ const DISABLED_ALERT_ASSETS = [];
 const notificationThresholds = {
     fNode: { 30000: false, 15000: false, 5000: false },
     Fry2: { 5000: false, 2500: false, 1000: false }, // Example thresholds, can be adjusted
-    TFry: { 500000: false, 250000: false, 50000: false }
+    TFry: { 50000: false, 25000: false, 10000: false }
 };
 
 // Track if we have already sent a refill message
@@ -212,25 +212,39 @@ async function checkBalances(client) {
         lastStatusTime = now;
 
         let allBalancesAreSafe = true;
+        let lowBalanceAssets = [];
+        
         for (const [asset, thresholds] of Object.entries(notificationThresholds)) {
             const balance = balances[asset];
+            let assetHasIssues = false;
 
             for (const threshold of Object.keys(thresholds)) {
                 if (balance <= Number(threshold)) {
                     allBalancesAreSafe = false;
+                    assetHasIssues = true;
                     break;
                 }
             }
-
-            if (!allBalancesAreSafe) break;
+            
+            if (assetHasIssues) {
+                lowBalanceAssets.push(`${asset}: ${balance.toFixed(2)}`);
+            }
         }
 
+        // Always send 8-hour status report, but adjust message based on balance status
         if (allBalancesAreSafe) {
             await sendStaffNotification(
                 client,
                 `✅ All systems running. Balance checker report:\n\n🔹 fNode: ${balances.fNode.toFixed(2)}\n🔹 Fry2: ${balances.Fry2.toFixed(2)}\n🔹 tFRY: ${balances.TFry.toFixed(2)}`,
                 "✅ Bot Status Check",
                 0x3498db
+            );
+        } else {
+            await sendStaffNotification(
+                client,
+                `⚠️ Balance checker status report:\n\n🔹 fNode: ${balances.fNode.toFixed(2)}\n🔹 Fry2: ${balances.Fry2.toFixed(2)}\n🔹 tFRY: ${balances.TFry.toFixed(2)}\n\n**Low Balance Assets:** ${lowBalanceAssets.join(', ')}\n\n*This is a periodic status report - specific low balance alerts are sent separately.*`,
+                "⚠️ Bot Status Check (Issues Detected)",
+                0xff9500
             );
         }
     }

@@ -735,6 +735,94 @@ async function handleTicketModalSubmit(interaction, ticketType) {
                     try {
                         await flxtimePartnersHandler.sendFlxtimePartnersWelcomeMessage(ticketChannel, user, validatedData);
                         logger.info(`Flxtime Partners welcome message sent for ticket ${ticketId}`);
+
+                        // Check for duplicate AEM key issuance
+                        const keyHistory = await supabaseHandler.checkFlxtimeKeyHistory(user.id);
+                        if (keyHistory.hasKey) {
+                            logger.warn(`Duplicate AEM key attempt detected for user ${user.id}: already has key from ticket ${keyHistory.previousTicket.id}`);
+                            
+                            // Update current ticket to mark validation as false for duplicate attempt
+                            await supabaseHandler.updateTicket(ticketId, {
+                                flxtime_validated: false // Ensure validation is false
+                            });
+
+                            // Format previous issuance date
+                            const issuedDate = new Date(keyHistory.previousTicket.issuedAt);
+                            const formattedDate = issuedDate.toLocaleDateString() + ' ' + issuedDate.toLocaleTimeString();
+                            
+                            // Send duplicate detection message to user
+                            const duplicateEmbed = new EmbedBuilder()
+                                .setTitle('🚫 Duplicate AEM Key Request Detected')
+                                .setDescription('Our system has detected that you have already received an AEM key from a previous Flxtime Partners ticket.')
+                                .addFields(
+                                    {
+                                        name: '📋 Previous Key Details',
+                                        value: `**Ticket ID:** ${keyHistory.previousTicket.id}\n**AEM Key:** \`${keyHistory.previousTicket.keyIssued}\`\n**Issued Date:** ${formattedDate}\n**Issued By:** ${keyHistory.previousTicket.issuedBy}`,
+                                        inline: false
+                                    },
+                                    {
+                                        name: '⚠️ Important Notice',
+                                        value: 'Each user is only eligible for **one AEM key** through the Flxtime Partners program. This ticket will be reviewed by our admin team, but no additional key will be issued.',
+                                        inline: false
+                                    },
+                                    {
+                                        name: '💡 If You Have Questions',
+                                        value: 'If you believe this is an error or have questions about your existing key, please explain your situation in this ticket and our admin team will review it.',
+                                        inline: false
+                                    }
+                                )
+                                .setColor(0xFF6B6B) // Red color for error/warning
+                                .setFooter({ text: 'Fry Networks × Flxtime Partnership - Duplicate Prevention System' })
+                                .setTimestamp();
+
+                            await ticketChannel.send({ embeds: [duplicateEmbed] });
+
+                            // Ping ticket admin role with details
+                            const adminPingEmbed = new EmbedBuilder()
+                                .setTitle('🔒 Duplicate AEM Key Attempt - Admin Review Required')
+                                .setDescription(`<@&${config.ticketAdminRoleId}> - User ${user.tag} (${user.id}) attempted to request a second AEM key.`)
+                                .addFields(
+                                    {
+                                        name: '🎫 Current Ticket',
+                                        value: `**ID:** ${ticketId}\n**Channel:** <#${ticketChannel.id}>\n**User:** <@${user.id}>`,
+                                        inline: true
+                                    },
+                                    {
+                                        name: '📊 Previous Key Issuance',
+                                        value: `**Previous Ticket:** ${keyHistory.previousTicket.id}\n**Key:** \`${keyHistory.previousTicket.keyIssued}\`\n**Issued:** ${formattedDate}\n**By:** ${keyHistory.previousTicket.issuedBy}`,
+                                        inline: true
+                                    },
+                                    {
+                                        name: '⚠️ Action Required',
+                                        value: 'Please review this ticket. The **Validate Flxtime Partner** and **Issue AEM Key** buttons are disabled for this ticket to prevent duplicate issuance.',
+                                        inline: false
+                                    }
+                                )
+                                .setColor(0xFF6B6B)
+                                .setFooter({ text: 'Duplicate Prevention System' })
+                                .setTimestamp();
+
+                            await ticketChannel.send({ embeds: [adminPingEmbed] });
+
+                            // Log the duplicate attempt
+                            await supabaseHandler.logBotActivity('warn', 'flxtime_duplicate_key', `User ${user.id} attempted duplicate AEM key request. Previous key issued in ticket ${keyHistory.previousTicket.id}.`);
+                            
+                            // Update staff action buttons to reflect duplicate detection
+                            const currentTicket = await supabaseHandler.getTicketById(ticketId);
+                            if (currentTicket?.original_message_id) {
+                                try {
+                                    const actionRows = getTicketActionRow(currentTicket);
+                                    const originalMessage = await ticketChannel.messages.fetch(currentTicket.original_message_id);
+                                    await originalMessage.edit({
+                                        content: 'Staff Actions:',
+                                        components: actionRows
+                                    });
+                                    logger.info(`Updated staff action buttons for duplicate key ticket ${ticketId}`);
+                                } catch (buttonError) {
+                                    logger.error(`Failed to update action buttons for duplicate key ticket ${ticketId}: ${buttonError.message}`, buttonError);
+                                }
+                            }
+                        }
                     } catch (error) {
                         logger.error(`Failed to send Flxtime Partners welcome message for ticket ${ticketId}: ${error.message}`, error);
                     }

@@ -104,10 +104,44 @@ client.on('messageCreate', async (message) => {
     const prefix = '!'; // Define the command prefix
     const isCommand = message.content.startsWith(prefix);
 
+    /**
+     * Check if a channel belongs to the monitored category, including forum threads
+     * @param {import('discord.js').GuildChannel} channel - The Discord channel to check
+     * @param {string} targetCategoryId - The category ID to search for
+     * @returns {boolean} - True if channel belongs to monitored category
+     */
+    function isChannelInMonitoredCategory(channel, targetCategoryId) {
+        if (!channel) return false;
+        
+        // Direct parent check (regular channels)
+        if (channel.parentId === targetCategoryId) {
+            return true;
+        }
+        
+        // Forum thread check (grandparent is category)
+        if (channel.parent && channel.parent.parentId === targetCategoryId) {
+            return true;
+        }
+        
+        // Additional safety: walk up the full parent chain
+        let currentChannel = channel;
+        let depth = 0;
+        while (currentChannel && depth < 5) { // Prevent infinite loops
+            if (currentChannel.parentId === targetCategoryId) {
+                return true;
+            }
+            currentChannel = currentChannel.parent;
+            depth++;
+        }
+        
+        return false;
+    }
+
     // If the message is NOT a command OR (it IS a command AND not from staff)
     // AND the channel is NOT in the monitored category, ignore it.
-    if ((!isCommand || (isCommand && !isStaff)) && message.channel.parentId !== monitoredCategoryId) {
-        logger.info(`Ignoring message ${message.content} from ${message.author.tag} in channel ${message.channel.name} (Parent ID: ${message.channel.parentId}) because it's not a staff command and not in the monitored category.`);
+    const isInMonitoredCategory = isChannelInMonitoredCategory(message.channel, monitoredCategoryId);
+    if ((!isCommand || (isCommand && !isStaff)) && !isInMonitoredCategory) {
+        logger.info(`Ignoring message "${message.content}" from ${message.author.tag} in channel ${message.channel.name} (Parent ID: ${message.channel.parentId}, Type: ${message.channel.type}) because it's not a staff command and not in the monitored category.`);
         return;
     }
     // ----------------------------------

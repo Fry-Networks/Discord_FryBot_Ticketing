@@ -80,7 +80,30 @@ async function handleValidateFlxtimeButton(interaction, ticketId) {
 
         logger.info(`Admin ${staffUsername} (${staffId}) attempting to validate Flxtime partner for ticket ${ticketId}`);
 
-        // Show confirmation dialog
+        // Get ticket information first
+        const ticket = await supabaseHandler.getTicketById(ticketId);
+        if (!ticket) {
+            return await interaction.reply({
+                content: '❌ Ticket not found.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Check for duplicate key request with database lookup
+        const keyHistory = await supabaseHandler.checkFlxtimeKeyHistory(ticket.user_id);
+        if (keyHistory.hasKey) {
+            logger.warn(`Validation blocked for ticket ${ticketId}: User ${ticket.user_id} already has AEM key from ticket ${keyHistory.previousTicket.id}`);
+            
+            const issuedDate = new Date(keyHistory.previousTicket.issuedAt);
+            const formattedDate = issuedDate.toLocaleDateString() + ' ' + issuedDate.toLocaleTimeString();
+            
+            return await interaction.reply({ 
+                content: `🚫 **Validation Blocked - Duplicate Key Request**\n\nThis user has already received an AEM key:\n**Previous Ticket:** ${keyHistory.previousTicket.id}\n**AEM Key:** \`${keyHistory.previousTicket.keyIssued}\`\n**Issued Date:** ${formattedDate}\n**Issued By:** ${keyHistory.previousTicket.issuedBy}\n\nValidation is disabled to prevent duplicate key issuance.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        // Show confirmation dialog for valid requests
         await interaction.reply({
             content: '❓ **Confirm Flxtime Partner Validation**\n\nAre you sure you have confirmed that this user is a valid Flexer with the required role in the Flxtime Discord server?',
             components: [
@@ -221,6 +244,20 @@ async function handleIssueAemKeyButton(interaction, ticketId) {
             });
         }
 
+        // Check for duplicate key request with database lookup
+        const keyHistory = await supabaseHandler.checkFlxtimeKeyHistory(ticket.user_id);
+        if (keyHistory.hasKey) {
+            logger.warn(`AEM key issuance blocked for ticket ${ticketId}: User ${ticket.user_id} already has AEM key from ticket ${keyHistory.previousTicket.id}`);
+            
+            const issuedDate = new Date(keyHistory.previousTicket.issuedAt);
+            const formattedDate = issuedDate.toLocaleDateString() + ' ' + issuedDate.toLocaleTimeString();
+            
+            return await interaction.reply({ 
+                content: `🚫 **AEM Key Issuance Blocked - Duplicate Request**\n\nThis user has already received an AEM key:\n**Previous Ticket:** ${keyHistory.previousTicket.id}\n**AEM Key:** \`${keyHistory.previousTicket.keyIssued}\`\n**Issued Date:** ${formattedDate}\n**Issued By:** ${keyHistory.previousTicket.issuedBy}\n\nKey issuance is disabled to prevent duplicate keys.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
         if (!ticket.flxtime_validated) {
             return await interaction.reply({
                 content: '❌ This Flxtime partner has not been validated yet. Please validate them first.',
@@ -302,6 +339,28 @@ async function handleIssueAemKeyButton(interaction, ticketId) {
             await channel.send({
                 content: `${user}, your free AI Edge Miner key is ready! 🎉`,
                 embeds: [keyEmbed]
+            });
+
+            // Add completion prompt similar to Node Forgo system
+            const completionMessage = `Your Flxtime Partners request is now complete! We have validated your Flexer status and issued your free AI Edge Miner key. 
+
+If you have no further questions, you can close the ticket using the button below. If you still need assistance, click "More Questions".`;
+
+            const closeButton = new ButtonBuilder()
+                .setCustomId(`conclude_close_ticket:${ticketId}`)
+                .setLabel('🔒 Close Ticket')
+                .setStyle(ButtonStyle.Success);
+
+            const moreQuestionsButton = new ButtonBuilder()
+                .setCustomId(`conclude_more_questions:${ticketId}`)
+                .setLabel('❓ More Questions')
+                .setStyle(ButtonStyle.Primary);
+
+            const actionRow = new ActionRowBuilder().addComponents(closeButton, moreQuestionsButton);
+
+            await channel.send({
+                content: completionMessage,
+                components: [actionRow]
             });
         }
 
