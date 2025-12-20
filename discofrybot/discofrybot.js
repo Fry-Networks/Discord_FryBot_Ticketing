@@ -2,10 +2,10 @@ require('dotenv').config();
 const { Client, Events, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const logger = require('./logger');
-const supabaseHandler = require('./NewTicketLogic/handlers/supabaseHandler'); // Import supabaseHandler
+const supabaseHandler = require('./ticketing-system/handlers/supabaseHandler'); // Import supabaseHandler
 const { extractAndValidateUrls, normalizeMessage } = require('./messageFilter'); // Import the filtering logic
-const config = require('./NewTicketLogic/utils/config'); // Add this import
-const { handlePrefixCommand } = require('./NewTicketLogic/commands/customCommands'); // Import the prefix command handler
+const config = require('./ticketing-system/utils/config'); // Add this import
+const { handlePrefixCommand } = require('./ticketing-system/commands/customCommands'); // Import the prefix command handler
 
 // Configuration from .env
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -84,7 +84,7 @@ const client = new Client({
 });
 // Ticket system integration
 //const { registerTicketCommands, setupTicketPanel } = require('./ticketSystem');
-const { initializeTicketSystem } = require('./NewTicketLogic/ticketSystem');
+const { initializeTicketSystem } = require('./ticketing-system/ticketSystem');
 // require('./Ticket-System/ticketClaimManager')(client);
 require('./balanceCheck')(client); // Initialize balance checking
 

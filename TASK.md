@@ -1,6 +1,7 @@
 # ✅ Task Tracker – Discord Ticketing Rewrite
 
 ## Active Tasks
+- [ ] **Consolidate env vars & Docker Compose with 1Password (2025-12-19)** - Plan and execute env consolidation for bot and dashboard, remove scattered .env files, move fry-dashboard to sibling folder, and source all secrets from 1Password via Docker Compose.
 - [x] **Fix scam detection to work in forum channels and all nested channel types** - Completed 11/9/2025
   - Enhanced channel detection logic in `discofrybot.js` to properly handle forum threads and nested structures
   - Added `isChannelInMonitoredCategory()` function that checks direct parent, grandparent (for forum threads), and full parent chain
@@ -85,9 +86,9 @@
         - [x] Update `logTicketMessage` in `supabaseHandler.js` to reset inactivity counters.
         - [x] Update `logTicketMessage` in `supabaseHandler.js` to reset staff inactivity counters.
         - [x] Update `logTicketMessage` in `supabaseHandler.js` to conditionally update `last_message_at` and `last_message_from_role` based on sender role, and to not reset counters for bot messages.
-        - [x] Create `discofrybot/NewTicketLogic/modules/inactivityPinger.js` for ping logic.
-        - [x] Update `discofrybot/NewTicketLogic/modules/inactivityPinger.js` to include `pingUserForInactivity`, `pingModeratorForInactivity`, and `autoCloseInactiveTicket` functions.
-        - [x] Update `discofrybot/NewTicketLogic/modules/inactivityPinger.js` to handle two-stage staff pings.
+        - [x] Create `discofrybot/ticketing-system/modules/inactivityPinger.js` for ping logic.
+        - [x] Update `discofrybot/ticketing-system/modules/inactivityPinger.js` to include `pingUserForInactivity`, `pingModeratorForInactivity`, and `autoCloseInactiveTicket` functions.
+        - [x] Update `discofrybot/ticketing-system/modules/inactivityPinger.js` to handle two-stage staff pings.
         - [x] Update `ticketSystem.js` to call the new `inactivityPinger` module and the `get_inactive_tickets` RPC.
         - [x] Update `ticketSystem.js` to handle multi-stage pings and auto-closure logic.
         - [x] Update `ticketSystem.js` to handle two-stage staff pings.
@@ -184,24 +185,24 @@ Conducted a security audit and refactor of the API routes to address authenticat
 Implemented a new ticket type "Fry Conversion Issues" with an automated workflow to assist users with FRY 1.0 to FRY 2.0/fNode conversion problems. This includes a custom welcome message and an eligibility check based on Algorand address.
 
 ### Changes Made
-1.  **`discofrybot/NewTicketLogic/utils/config.js`**:
+1.  **`discofrybot/ticketing-system/utils/config.js`**:
     *   Added `fry_conversion_issues` to the `categoryIds` object, linking it to the `TICKET_CAT_FRY_CONVERSION` environment variable.
-2.  **`discofrybot/NewTicketLogic/utils/formValidator.js`**:
+2.  **`discofrybot/ticketing-system/utils/formValidator.js`**:
     *   Defined the form fields for `fry_conversion_issues` to include `contact_info`, `algorand_address`, `minerkeys`, and `description`.
-3.  **`discofrybot/NewTicketLogic/handlers/interactionHandler.js`**:
+3.  **`discofrybot/ticketing-system/handlers/interactionHandler.js`**:
     *   Added "Fry Conversion Issues" as a new option in the ticket creation panel's dropdown menu.
     *   Implemented a user-facing "Check Eligibility" button that appears in all ticket types. When clicked, it prompts the user for an Algorand address via a modal.
     *   The modal submission triggers an eligibility check, and the detailed results are posted publicly in the ticket channel.
 4.  **Supabase Table `api.conversion_eligibility`**:
     *   Created a new table with columns `address`, `fry_1_0_held`, `fry_1_0_staked_verification`, `fry_1_0_staked_cometa`, `fry_1_0_eq_of_lp_cometa`, `fry_1_0_eq_of_lp_tinyman`, and `total_fry_1_0_available` to store detailed eligibility data.
     *   Enabled Row Level Security (RLS) and added a service role policy for secure access.
-5.  **`discofrybot/NewTicketLogic/handlers/supabaseHandler.js`**:
+5.  **`discofrybot/ticketing-system/handlers/supabaseHandler.js`**:
     *   Updated the `checkConversionEligibility` function to query the new `api.conversion_eligibility` table and return detailed eligibility information.
-6.  **`discofrybot/NewTicketLogic/faq/conversion.json`**:
+6.  **`discofrybot/ticketing-system/faq/conversion.json`**:
     *   Created an empty JSON file to serve as the base for "Fry Conversion" FAQ content. This content will be populated in a separate task.
-7.  **`discofrybot/NewTicketLogic/modules/faqHandler.js`**:
+7.  **`discofrybot/ticketing-system/modules/faqHandler.js`**:
     *   Updated to include the new "Fry Conversion" FAQ category in the FAQ selection menu.
-8.  **`discofrybot/NewTicketLogic/handlers/ticketCreationHandler.js`**:
+8.  **`discofrybot/ticketing-system/handlers/ticketCreationHandler.js`**:
     *   Implemented a custom welcome message for `fry_conversion_issues` tickets. This message pings the user, provides key conversion details (snapshot date, conversion options, vesting schedule), and directs them to the FAQs.
     *   Integrated the automated eligibility check, which calls `supabaseHandler.checkConversionEligibility` and posts the detailed eligibility result in the ticket channel.
     *   Added the "Check My Eligibility" button to the initial welcome message for all ticket types.

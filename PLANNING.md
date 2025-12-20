@@ -5,6 +5,12 @@ This document outlines the architecture of the **completed** and **actively runn
 
 ---
 
+## Deployment Notes
+- Bot code now lives under `discofrybot/ticketing-system/`; the `fry-dashboard` Next.js app is a sibling folder at repo root.
+- Environment variables are injected via 1Password `op://` refs defined in `docker-compose.yml` using the `Discord Bot` vault items (`Discofrybot Secrets`, `Tickets Dash Secrets`) plus a low-sensitivity host env file at `/etc/discofrybot/.1p.env` (template in repo). Preferred command: `./scripts/op-compose.sh <cmd>` (wraps `op run --env-file /etc/discofrybot/.1p.env -- docker compose ...`).
+
+---
+
 ## 🏗 **System Architecture**
 
 ### **Core Design Principles**
@@ -233,7 +239,7 @@ api.bot_logs                  -- System activity monitoring
 
 ### **Code Organization**
 ```
-NewTicketLogic/
+ticketing-system/
 ├── handlers/           # Business logic (creation, interaction, conversion, etc.)
 ├── modules/            # Standalone features (claiming, closing, FAQ, etc.)
 ├── utils/              # Shared utilities (config, validation, logging)

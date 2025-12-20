@@ -65,7 +65,7 @@ A comprehensive Discord bot for managing support tickets, FRY token conversions,
 
 ## 🏗 **Architecture Overview**
 
-### **Core Modules** (`NewTicketLogic/`)
+### **Core Modules** (`ticketing-system/`)
 ```
 ├── ticketSystem.js           # Main system initialization & event handling
 ├── handlers/                 # Core business logic handlers
@@ -92,7 +92,7 @@ A comprehensive Discord bot for managing support tickets, FRY token conversions,
 ```
 
 ### **Dashboard Integration** (`fry-dashboard/`)
-- Next.js-based web dashboard for staff and users
+- Next.js-based web dashboard for staff and users (now a sibling folder to `discofrybot/`)
 - Real-time ticket management and analytics
 - Device monitoring and rewards tracking
 - Admin tools and bonus management systems
@@ -108,54 +108,14 @@ A comprehensive Discord bot for managing support tickets, FRY token conversions,
 - Google Drive API credentials
 - Discord Bot Token with necessary permissions
 
-### **Environment Configuration**
-```env
-# Discord Configuration
-DISCORD_TOKEN=your_bot_token
-CLIENT_ID=your_client_id
-DISCORD_CLIENT_SECRET=your_client_secret
-GUILD_ID=your_server_id
-
-# Supabase Configuration  
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE=your_service_role_key
-
-# Google Drive Integration
-GOOGLE_REFRESH_TOKEN=your_refresh_token
-GOOGLE_DRIVE_FOLDER_ID=your_drive_folder
-
-# Discord Channel & Role IDs
-CLOSED_TICKET_CAT=closed_category_id
-STAFF_ROLE_ID=staff_role_id
-TICKET_ADMIN_ROLE_ID=admin_role_id
-INTERN_ROLE_ID=intern_role_id
-LOG_CHANNEL_ID=log_channel_id
-
-# Ticket Category IDs (9 categories)
-TICKET_CAT_ORDER=category_id
-TICKET_CAT_TECH_SUPPORT=category_id  
-TICKET_CAT_MINER_KEYS=category_id
-TICKET_CAT_REWARDS=category_id
-TICKET_CAT_REGISTRATION=category_id
-TICKET_CAT_FRY_CONVERSION=category_id
-TICKET_CAT_NODE_FORGO_RETURN=category_id
-TICKET_CAT_FLXTIME_PARTNERS=category_id
-TICKET_CAT_GENERAL=category_id
-
-# FRY Conversion Configuration
-ASSET_ID_FRY1=fry_1_asset_id
-ASSET_ID_FRY2=fry_2_asset_id  
-ASSET_ID_FNODE=fnode_asset_id
-ASSET_ID_TFRY=tfry_asset_id
-BURN_WALLET_ADDRESS=burn_wallet_address
-MIN_ALGO_BALANCE_FOR_TX=0.5
-BURN_TX_LOOKBACK_DAYS=180
-BURN_TX_MIN_AMOUNT=100
-
-# System Configuration
-INACTIVITY_MONITORING_ENABLED=true
-MAX_CHANNELS_PER_CATEGORY=50
-```
+### **Environment & Secrets**
+- No `.env` files are used. All secrets come from 1Password `op://` refs in `docker-compose.yml` (vault: `Discord Bot`; items: `Discofrybot Secrets`, `Tickets Dash Secrets`).
+- Low-sensitivity IDs/maps/avatars live in `/etc/discofrybot/.1p.env` (template at repo root). Keep it `chmod 600` and load via `--env-file /etc/discofrybot/.1p.env`.
+- Preferred helper: `./scripts/op-compose.sh build discofrybot` (or `... up -d`, `... build fry-dashboard`). It injects the 1P token (from `op://Discord Bot/OP_SERVICE_ACCOUNT_TOKEN/credential` if not set) and uses `/etc/discofrybot/.1p.env`.
+- Manual run (if you prefer):  
+  `export OP_SERVICE_ACCOUNT_TOKEN="$(op read 'op://Discord Bot/OP_SERVICE_ACCOUNT_TOKEN/credential')"`  
+  `op run -- docker compose --env-file /etc/discofrybot/.1p.env build`  
+  `op run -- docker compose --env-file /etc/discofrybot/.1p.env up -d`
 
 ### **Docker Deployment**
 ```bash

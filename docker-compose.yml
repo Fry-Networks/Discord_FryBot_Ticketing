@@ -1,3 +1,94 @@
+# Env blocks pull secrets from 1Password; values are resolved at runtime via `op run`.
+x-discofrybot-env: &discofrybot-env
+  NODE_ENV: production
+  OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN?missing_OP_SERVICE_ACCOUNT_TOKEN}
+  DISCORD_TOKEN: 'op://Discord Bot/Discofrybot Secrets/DISCORD_TOKEN'
+  CLIENT_ID: 'op://Discord Bot/Discofrybot Secrets/CLIENT_ID'
+  GUILD_ID: ${GUILD_ID?missing_GUILD_ID}
+  BOT_MAP: ${BOT_MAP?missing_BOT_MAP}
+  STAFF_MAP: ${STAFF_MAP?missing_STAFF_MAP}
+  CRYPTOSOLJAH_CAT: ${CRYPTOSOLJAH_CAT?missing_CRYPTOSOLJAH_CAT}
+  MRSIR9333_CAT: ${MRSIR9333_CAT?missing_MRSIR9333_CAT}
+  ATORMONKEY_CAT: ${ATORMONKEY_CAT?missing_ATORMONKEY_CAT}
+  DUDE350Z_CAT: ${DUDE350Z_CAT?missing_DUDE350Z_CAT}
+  FUDSKIE_CAT: ${FUDSKIE_CAT?missing_FUDSKIE_CAT}
+  PACKETTHROWER_CAT: ${PACKETTHROWER_CAT?missing_PACKETTHROWER_CAT}
+  KATARONI_SURPRISE_CAT: ${KATARONI_SURPRISE_CAT?missing_KATARONI_SURPRISE_CAT}
+  STAFF_ROLE_ID: ${STAFF_ROLE_ID?missing_STAFF_ROLE_ID}
+  INTERN_ROLE_ID: ${INTERN_ROLE_ID?missing_INTERN_ROLE_ID}
+  TICKET_MOD_ROLE: ${TICKET_MOD_ROLE?missing_TICKET_MOD_ROLE}
+  TICKET_ADMIN_ROLE: ${TICKET_ADMIN_ROLE?missing_TICKET_ADMIN_ROLE}
+  LOG_CHANNEL_ID: ${LOG_CHANNEL_ID?missing_LOG_CHANNEL_ID}
+  INACTIVITY_MONITORING_ENABLED: ${INACTIVITY_MONITORING_ENABLED:-false}
+  TICKET_CAT_ORDER: ${TICKET_CAT_ORDER?missing_TICKET_CAT_ORDER}
+  TICKET_CAT_REGISTRATION: ${TICKET_CAT_REGISTRATION?missing_TICKET_CAT_REGISTRATION}
+  TICKET_CAT_REWARDS: ${TICKET_CAT_REWARDS?missing_TICKET_CAT_REWARDS}
+  TICKET_CAT_TECH_SUPPORT: ${TICKET_CAT_TECH_SUPPORT?missing_TICKET_CAT_TECH_SUPPORT}
+  TICKET_CAT_MINER_KEYS: ${TICKET_CAT_MINER_KEYS?missing_TICKET_CAT_MINER_KEYS}
+  TICKET_CAT_NODE_FORGO_RETURN: ${TICKET_CAT_NODE_FORGO_RETURN?missing_TICKET_CAT_NODE_FORGO_RETURN}
+  TICKET_CAT_FRY_CONVERSION: ${TICKET_CAT_FRY_CONVERSION?missing_TICKET_CAT_FRY_CONVERSION}
+  TICKET_CAT_FLXTIME_PARTNERS: ${TICKET_CAT_FLXTIME_PARTNERS?missing_TICKET_CAT_FLXTIME_PARTNERS}
+  TICKET_CAT1: ${TICKET_CAT1?missing_TICKET_CAT1}
+  TICKET_CAT2: ${TICKET_CAT2?missing_TICKET_CAT2}
+  CLOSED_TICKET_CAT: ${CLOSED_TICKET_CAT?missing_CLOSED_TICKET_CAT}
+  FLXTIME_VERIFICATION_ENABLED: ${FLXTIME_VERIFICATION_ENABLED:-false}
+  FLXTIME_SERVER_ID: ${FLXTIME_SERVER_ID:-}
+  FLXTIME_FLEXER_ROLE_ID: ${FLXTIME_FLEXER_ROLE_ID:-}
+  LOW_BAL_CHANNEL_ID: ${LOW_BAL_CHANNEL_ID?missing_LOW_BAL_CHANNEL_ID}
+  FRYBAL_ROLE_ID: ${FRYBAL_ROLE_ID?missing_FRYBAL_ROLE_ID}
+  REWARD_WALLET_ADDRESS: ${REWARD_WALLET_ADDRESS?missing_REWARD_WALLET_ADDRESS}
+  BURN_WALLET_ADDRESS: ${BURN_WALLET_ADDRESS?missing_BURN_WALLET_ADDRESS}
+  ALGOD_API_URL: ${ALGOD_API_URL?missing_ALGOD_API_URL}
+  ASSET_ID_FNODE: ${ASSET_ID_FNODE?missing_ASSET_ID_FNODE}
+  ASSET_ID_FRY1: ${ASSET_ID_FRY1?missing_ASSET_ID_FRY1}
+  ASSET_ID_FRY2: ${ASSET_ID_FRY2?missing_ASSET_ID_FRY2}
+  ASSET_ID_TFRY: ${ASSET_ID_TFRY?missing_ASSET_ID_TFRY}
+  SUPABASE_URL: 'op://Discord Bot/Discofrybot Secrets/SUPABASE_URL'
+  SUPABASE_SERVICE_ROLE: 'op://Discord Bot/Discofrybot Secrets/SUPABASE_SERVICE_ROLE'
+  MONGO_FLX_URI: 'op://Discord Bot/Discofrybot Secrets/MONGO_FLX_URI'
+  MONGODB_FRYCONVERSION_STRING: 'op://Discord Bot/Discofrybot Secrets/MONGODB_FRYCONVERSION_STRING'
+  GOOGLE_CLIENT_ID: 'op://Discord Bot/Discofrybot Secrets/GOOGLE_CLIENT_ID'
+  GOOGLE_CLIENT_SECRET: 'op://Discord Bot/Discofrybot Secrets/GOOGLE_CLIENT_SECRET'
+  GOOGLE_REFRESH_TOKEN: 'op://Discord Bot/Discofrybot Secrets/GOOGLE_REFRESH_TOKEN'
+  GOOGLE_DRIVE_FOLDER_ID: 'op://Discord Bot/Discofrybot Secrets/GOOGLE_DRIVE_FOLDER_ID'
+  GOOGLE_BOTLOGS_FOLDER_ID: 'op://Discord Bot/Discofrybot Secrets/GOOGLE_BOTLOGS_FOLDER_ID'
+  N8N_HOOK: 'op://Discord Bot/Discofrybot Secrets/N8N_HOOK'
+  LOG_LEVEL: ${LOG_LEVEL:-debug}
+
+x-fry-dashboard-env: &fry-dashboard-env
+  NODE_ENV: production
+  OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN?missing_OP_SERVICE_ACCOUNT_TOKEN}
+  NEXT_PUBLIC_SUPABASE_URL: 'op://Discord Bot/Tickets Dash Secrets/NEXT_PUBLIC_SUPABASE_URL'
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'op://Discord Bot/Tickets Dash Secrets/NEXT_PUBLIC_SUPABASE_ANON_KEY'
+  NEXT_PUBLIC_SITE_URL:  'op://Discord Bot/Tickets Dash Secrets/NEXT_PUBLIC_SITE_URL'
+  SUPABASE_SERVICE_ROLE_KEY: 'op://Discord Bot/Tickets Dash Secrets/SUPABASE_SERVICE_ROLE_KEY'
+  SUPABASE_URL: 'op://Discord Bot/Tickets Dash Secrets/SUPABASE_URL'
+  SUPABASE_ACCESS_TOKEN: 'op://Discord Bot/Tickets Dash Secrets/SUPABASE_ACCESS_TOKEN'
+  SUPABASE_PROJECT_ID: 'op://Discord Bot/Tickets Dash Secrets/SUPABASE_PROJECT_ID'
+  DISCORD_CLIENT_ID: 'op://Discord Bot/Tickets Dash Secrets/DISCORD_CLIENT_ID'
+  DISCORD_CLIENT_SECRET: 'op://Discord Bot/Tickets Dash Secrets/DISCORD_CLIENT_SECRET'
+  DISCORD_BOT_TOKEN: 'op://Discord Bot/Tickets Dash Secrets/DISCORD_BOT_TOKEN'
+  DISCORD_GUILD_ID: ${DISCORD_GUILD_ID?missing_DISCORD_GUILD_ID}
+  GUILD_ID: ${GUILD_ID?missing_GUILD_ID}
+  STAFF_ROLE_ID: ${STAFF_ROLE_ID?missing_STAFF_ROLE_ID}
+  INTERN_ROLE_ID: ${INTERN_ROLE_ID?missing_INTERN_ROLE_ID}
+  STAFF_MAP: ${STAFF_MAP?missing_STAFF_MAP}
+  MONGO_DASH_URI: 'op://Discord Bot/Tickets Dash Secrets/MONGO_DASH_URI'
+  GOOGLE_CLIENT_ID: 'op://Discord Bot/Tickets Dash Secrets/GOOGLE_CLIENT_ID'
+  GOOGLE_CLIENT_SECRET: 'op://Discord Bot/Tickets Dash Secrets/GOOGLE_CLIENT_SECRET'
+  GOOGLE_REFRESH_TOKEN: 'op://Discord Bot/Tickets Dash Secrets/GOOGLE_REFRESH_TOKEN'
+  GOOGLE_DRIVE_FOLDER_ID: 'op://Discord Bot/Tickets Dash Secrets/GOOGLE_DRIVE_FOLDER_ID'
+  GOOGLE_BOTLOGS_FOLDER_ID: 'op://Discord Bot/Tickets Dash Secrets/GOOGLE_BOTLOGS_FOLDER_ID'
+  GOOGLE_SHARED_DRIVE_ID: 'op://Discord Bot/Tickets Dash Secrets/GOOGLE_SHARED_DRIVE_ID'
+  DUDE350Z_AVATAR: ${DUDE350Z_AVATAR?missing_DUDE350Z_AVATAR}
+  ATORMONKEY_AVATAR: ${ATORMONKEY_AVATAR?missing_ATORMONKEY_AVATAR}
+  CRYPTOSOLJAH_AVATAR: ${CRYPTOSOLJAH_AVATAR?missing_CRYPTOSOLJAH_AVATAR}
+  IOTANINE_AVATAR: ${IOTANINE_AVATAR?missing_IOTANINE_AVATAR}
+  MRSIR9333_AVATAR: ${MRSIR9333_AVATAR?missing_MRSIR9333_AVATAR}
+  FUDSKIE_AVATAR: ${FUDSKIE_AVATAR?missing_FUDSKIE_AVATAR}
+  KATARONI_SURPRISE_AVATAR: ${KATARONI_SURPRISE_AVATAR?missing_KATARONI_SURPRISE_AVATAR}
+  PACKETTHROWER_AVATAR: ${PACKETTHROWER_AVATAR?missing_PACKETTHROWER_AVATAR}
+
 services:
   discofrybot:
     container_name: discofrybot
@@ -5,36 +96,40 @@ services:
     build:
       context: ./discofrybot
       dockerfile: Dockerfile
+    environment: *discofrybot-env
     env_file:
-      - .env
+      - /etc/discofrybot/.1p.env
     volumes:
-      - ./logs:/app/logs
+      - /home/fryadmin/discofrybot/discofrybot/logs:/app/logs # Persist logs outside container
     networks:
       - frynet
-    user: node  
+    user: node
 
   fry-dashboard:
     build:
-      context: ./discofrybot/fry-dashboard
+      context: ./fry-dashboard
       dockerfile: Dockerfile
-    #ports:      - "127.0.0.1:3000:3000"
+      args:
+        <<: *fry-dashboard-env
+      secrets:
+        - op_token
+    #ports:
+    #  - "127.0.0.1:3000:3000"
     restart: unless-stopped
-    networks:
-      - frynet
-    user: node  
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run fryticketsdash
+    environment: *fry-dashboard-env
+    env_file:
+      - /etc/discofrybot/.1p.env
     volumes:
-      - /home/fryadmin/.cloudflared:/etc/cloudflared
+      - /home/fryadmin/discofrybot/fry-dashboard/logs:/app/logs # Persist logs outside container
     networks:
       - frynet
-    user: "1000:1000"
-      
+    user: node
+
 networks:
   frynet:
     name: frynet
     driver: bridge
+
+secrets:
+  op_token:
+    environment: OP_SERVICE_ACCOUNT_TOKEN

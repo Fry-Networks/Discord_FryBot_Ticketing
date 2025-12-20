@@ -1,6 +1,6 @@
 const winston = require('winston');
 const Transport = require('winston-transport');
-const { supabase } = require('./NewTicketLogic/supabase');
+const { supabase } = require('./ticketing-system/supabase');
 
 class SupabaseTransport extends Transport {
   async log(info, callback) {

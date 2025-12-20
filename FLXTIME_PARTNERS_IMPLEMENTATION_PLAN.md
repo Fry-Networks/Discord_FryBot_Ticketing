@@ -92,7 +92,7 @@ TICKET_CAT_FLXTIME_PARTNERS=your_category_id_here
 
 ## File Modifications
 
-### 1. discofrybot/NewTicketLogic/utils/formValidator.js
+### 1. discofrybot/ticketing-system/utils/formValidator.js
 
 **Changes:**
 - Add `flxtime_partners_support` to `ticketFields` object
@@ -114,7 +114,7 @@ function sanitizeAndValidateSolanaAddress(value) {
 }
 ```
 
-### 2. discofrybot/NewTicketLogic/handlers/interactionHandler.js
+### 2. discofrybot/ticketing-system/handlers/interactionHandler.js
 
 **Changes:**
 - Add "🤝 Flxtime Partners Support" to ticket type dropdown
@@ -138,7 +138,7 @@ else if (action === 'validate_flxtime_partner') {
 }
 ```
 
-### 3. discofrybot/NewTicketLogic/handlers/ticketCreationHandler.js
+### 3. discofrybot/ticketing-system/handlers/ticketCreationHandler.js
 
 **Changes:**
 - Add custom welcome message for Flxtime tickets
@@ -153,7 +153,7 @@ if (ticketType === 'flxtime_partners_support') {
 }
 ```
 
-### 4. discofrybot/NewTicketLogic/utils/config.js
+### 4. discofrybot/ticketing-system/utils/config.js
 
 **Changes:**
 - Add Flxtime category configuration
@@ -167,7 +167,7 @@ flxtimeServerId: process.env.FLXTIME_SERVER_ID,
 flxtimeFlexerRoleId: process.env.FLXTIME_FLEXER_ROLE_ID,
 ```
 
-### 5. discofrybot/NewTicketLogic/ticketSystem.js
+### 5. discofrybot/ticketing-system/ticketSystem.js
 
 **Changes:**
 - Integrate 12-hour screenshot reminder system
@@ -186,7 +186,7 @@ if (flxtimeTicketsNeedingReminder && flxtimeTicketsNeedingReminder.length > 0) {
 
 ## New Files to Create
 
-### 1. discofrybot/NewTicketLogic/handlers/flxtimePartnersHandler.js
+### 1. discofrybot/ticketing-system/handlers/flxtimePartnersHandler.js
 
 **Primary functions:**
 - `sendFlxtimePartnersWelcomeMessage(channel, user, ticketData)` - Custom welcome message
@@ -199,7 +199,7 @@ if (flxtimeTicketsNeedingReminder && flxtimeTicketsNeedingReminder.length > 0) {
 - `trackScreenshotSubmission(ticketId)` - Mark when screenshot received
 - `validateFlxtimeRole(userId, serverId)` - Future role validation (stub for now)
 
-### 2. discofrybot/NewTicketLogic/utils/solanaValidator.js
+### 2. discofrybot/ticketing-system/utils/solanaValidator.js
 
 **Primary functions:**
 - `validateSolanaAddress(address)` - Comprehensive Solana address validation

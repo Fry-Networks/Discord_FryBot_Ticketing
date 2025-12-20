@@ -15,7 +15,7 @@
 **/.env.development.local
 **/.env.production.local
 **/.env.test.local
-
+**/.1p.env
 # ─────────────────────────────────────
 # 🛠️ Build Outputs
 # ─────────────────────────────────────
@@ -49,7 +49,8 @@ jest-coverage/
 # ─────────────────────────────────────
 # 🧾 Logs / Generated Output
 # ─────────────────────────────────────
-logs/
+discofrybot/logs/
+fry-dashboard/logs/
 *.log
 *.csv
 *.sqlite
@@ -72,6 +73,8 @@ supabase/migrations/dev/
 # 🧠 AI Agents / Tooling
 # ─────────────────────────────────────
 .cline/
+.settings/
+cline_mcp_settings.json
 .mcp/
 **/scripts/tmp/
 **/scripts/output/
@@ -106,3 +109,13 @@ id_rsa.pub
 *.swp
 *.tmp
 *.ol*
+/python/*
+discofrybot/fry-dashboard/python/*.*
+discofrybot/fry-dashboard/tsconfig.tsbuildinfo
+discofrybot/tmp/*
+discofrybot/tmp/scripts/*
+discofrybot/scripts/*
+discofrybot/tools/*
+discofrybot/discofrybot/tools/*
+discofrybot/tools/bkp/ticketSystem3-18.js
+**/discofrybot/dockrebuild.sh

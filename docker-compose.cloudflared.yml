@@ -1,0 +1,16 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run fryticketsdash
+    volumes:
+      - /home/fryadmin/.cloudflared:/etc/cloudflared
+    networks:
+      - frynet
+    user: "1000:1000"
+
+networks:
+  frynet:
+    name: frynet
+    driver: bridge
