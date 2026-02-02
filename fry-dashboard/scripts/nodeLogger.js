@@ -10,9 +10,21 @@ const supabase = createClient(
 
 const logFilePath = path.join(__dirname, 'cron.log');
 const MAX_LENGTH = 800;
+const SENSITIVE_MESSAGE_PATTERNS = [
+  // Reason: mask common secret patterns in script logs before writing to disk/Supabase.
+  /(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|client[_-]?secret)\s*[:=]\s*[^,\s]+/gi
+];
 
 function timestamp() {
   return new Date().toISOString();
+}
+
+// Reason: redact obvious secret-like substrings in log messages.
+function redactSensitiveMessage(message) {
+  return SENSITIVE_MESSAGE_PATTERNS.reduce(
+    (result, pattern) => result.replace(pattern, '$1=[REDACTED]'),
+    message
+  );
 }
 
 async function logToSupabase(level, scope, message) {
@@ -33,17 +45,21 @@ async function logToSupabase(level, scope, message) {
 
 const logger = {
   info: async (message, scope = 'script') => {
-    const full = `[INFO] ${timestamp()} ${message}\n`;
+    // Reason: sanitize message before it hits stdout or log files.
+    const safeMessage = redactSensitiveMessage(message);
+    const full = `[INFO] ${timestamp()} ${safeMessage}\n`;
     process.stdout.write(full);
     fs.appendFileSync(logFilePath, full);
-    await logToSupabase('info', scope, message);
+    await logToSupabase('info', scope, safeMessage);
   },
 
   error: async (message, scope = 'script') => {
-    const full = `[ERROR] ${timestamp()} ${message}\n`;
+    // Reason: sanitize message before it hits stderr or log files.
+    const safeMessage = redactSensitiveMessage(message);
+    const full = `[ERROR] ${timestamp()} ${safeMessage}\n`;
     process.stderr.write(full);
     fs.appendFileSync(logFilePath, full);
-    await logToSupabase('error', scope, message);
+    await logToSupabase('error', scope, safeMessage);
   }
 };
 

@@ -1,7 +1,10 @@
+# Reason: explicit project name keeps this stack isolated from other compose files in this directory.
+name: discofrybot
+
 # Env blocks pull secrets from 1Password; values are resolved at runtime via `op run`.
+# Reason: OP token can be sourced from `.op-discobot.env` by `scripts/op-compose.sh`.
 x-discofrybot-env: &discofrybot-env
   NODE_ENV: production
-  OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN?missing_OP_SERVICE_ACCOUNT_TOKEN}
   DISCORD_TOKEN: 'op://Discord Bot/Discofrybot Secrets/DISCORD_TOKEN'
   CLIENT_ID: 'op://Discord Bot/Discofrybot Secrets/CLIENT_ID'
   GUILD_ID: ${GUILD_ID?missing_GUILD_ID}
@@ -57,7 +60,6 @@ x-discofrybot-env: &discofrybot-env
 
 x-fry-dashboard-env: &fry-dashboard-env
   NODE_ENV: production
-  OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN?missing_OP_SERVICE_ACCOUNT_TOKEN}
   NEXT_PUBLIC_SUPABASE_URL: 'op://Discord Bot/Tickets Dash Secrets/NEXT_PUBLIC_SUPABASE_URL'
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'op://Discord Bot/Tickets Dash Secrets/NEXT_PUBLIC_SUPABASE_ANON_KEY'
   NEXT_PUBLIC_SITE_URL:  'op://Discord Bot/Tickets Dash Secrets/NEXT_PUBLIC_SITE_URL'
@@ -88,6 +90,8 @@ x-fry-dashboard-env: &fry-dashboard-env
   FUDSKIE_AVATAR: ${FUDSKIE_AVATAR?missing_FUDSKIE_AVATAR}
   KATARONI_SURPRISE_AVATAR: ${KATARONI_SURPRISE_AVATAR?missing_KATARONI_SURPRISE_AVATAR}
   PACKETTHROWER_AVATAR: ${PACKETTHROWER_AVATAR?missing_PACKETTHROWER_AVATAR}
+  # Reason: default CA bundle path for MongoDB TLS.
+  MONGO_CA_CERT_PATH: ${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}
 
 services:
   discofrybot:
@@ -96,40 +100,103 @@ services:
     build:
       context: ./discofrybot
       dockerfile: Dockerfile
+    # Reason: ensure op run always receives a command even if image CMD isn't propagated.
+    command: ["node", "discofrybot.js"]
     environment: *discofrybot-env
     env_file:
       - /etc/discofrybot/.1p.env
+    # Reason: provide OP token as a runtime secret so it doesn't appear in container env/inspect.
+    secrets:
+      # Reason: compose ignores uid/gid/mode; entrypoint validates permissions at runtime.
+      - source: op_service_account_token
+    # Reason: resolve op:// refs only at runtime with a file-backed OP token.
+    entrypoint:
+      - sh
+      - -c
+      - |
+          if [ ! -r /run/secrets/op_service_account_token ]; then
+            echo "Missing 1Password token secret at /run/secrets/op_service_account_token" >&2
+            exit 1
+          fi
+          # Reason: enforce secret file ownership/perms even though compose ignores uid/gid/mode.
+          # Reason: use $$ to avoid docker-compose variable interpolation at parse time.
+          secret_stat="$$(stat -c '%u:%g:%a' /run/secrets/op_service_account_token 2>/dev/null || true)"
+          case "$$secret_stat" in
+            0:1001:400|0:1001:440) ;;
+            *)
+              echo "Insecure secret file permissions for /run/secrets/op_service_account_token (got $${secret_stat:-unknown}). Expect root:app 0400/0440." >&2
+              exit 1
+              ;;
+          esac
+          export OP_SERVICE_ACCOUNT_TOKEN="$(cat /run/secrets/op_service_account_token)"
+          exec op run -- "$@"
+      - --
     volumes:
-      - /home/fryadmin/discofrybot/discofrybot/logs:/app/logs # Persist logs outside container
+      - /home/helpdesk/discofrybot/discofrybot/logs:/app/logs # Persist logs outside container
     networks:
       - frynet
-    user: node
+    # Reason: align runtime UID/GID with other repos (non-root 1001).
+    user: "1001:1001"
 
   fry-dashboard:
     build:
       context: ./fry-dashboard
       dockerfile: Dockerfile
       args:
-        <<: *fry-dashboard-env
-      secrets:
-        - op_token
+        # Reason: build uses only public NEXT_PUBLIC_* values; secrets resolve at runtime.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL?missing_NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY?missing_NEXT_PUBLIC_SUPABASE_ANON_KEY}
     #ports:
     #  - "127.0.0.1:3000:3000"
     restart: unless-stopped
+    # Reason: ensure op run always receives a command even if image CMD isn't propagated.
+    command: ["npm", "start"]
     environment: *fry-dashboard-env
     env_file:
       - /etc/discofrybot/.1p.env
+    # Reason: provide OP token as a runtime secret so it doesn't appear in container env/inspect.
+    secrets:
+      # Reason: compose ignores uid/gid/mode; entrypoint validates permissions at runtime.
+      - source: op_service_account_token
+    # Reason: resolve op:// refs only at runtime with a file-backed OP token.
+    entrypoint:
+      - sh
+      - -c
+      - |
+          if [ ! -r /run/secrets/op_service_account_token ]; then
+            echo "Missing 1Password token secret at /run/secrets/op_service_account_token" >&2
+            exit 1
+          fi
+          # Reason: enforce secret file ownership/perms even though compose ignores uid/gid/mode.
+          # Reason: use $$ to avoid docker-compose variable interpolation at parse time.
+          secret_stat="$$(stat -c '%u:%g:%a' /run/secrets/op_service_account_token 2>/dev/null || true)"
+          case "$$secret_stat" in
+            0:1001:400|0:1001:440) ;;
+            *)
+              echo "Insecure secret file permissions for /run/secrets/op_service_account_token (got $${secret_stat:-unknown}). Expect root:app 0400/0440." >&2
+              exit 1
+              ;;
+          esac
+          export OP_SERVICE_ACCOUNT_TOKEN="$(cat /run/secrets/op_service_account_token)"
+          exec op run -- "$@"
+      - --
     volumes:
-      - /home/fryadmin/discofrybot/fry-dashboard/logs:/app/logs # Persist logs outside container
+      - /home/helpdesk/discofrybot/fry-dashboard/logs:/app/logs # Persist logs outside container
+      # Reason: provide MongoDB CA bundle for TLS validation.
+      - ${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}:${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}:ro
     networks:
       - frynet
-    user: node
+    # Reason: align runtime UID/GID with other repos (non-root 1001).
+    user: "1001:1001"
 
 networks:
   frynet:
     name: frynet
+    # Reason: shared network across separate compose projects.
+    external: true
     driver: bridge
 
 secrets:
-  op_token:
-    environment: OP_SERVICE_ACCOUNT_TOKEN
+  op_service_account_token:
+    # Reason: token is read from a host file to avoid env/inspect exposure.
+    file: /etc/opt/discofrybot/op_service_account_token

@@ -3,6 +3,62 @@ const winston = require('winston');
 const Transport = require('winston-transport');
 const supabase = require('../supabaseClient'); // Adjusted path to the new Supabase client
 
+// Reason: redact sensitive keys in structured log payloads before they hit stdout/Supabase.
+const SENSITIVE_KEY_PATTERNS = [
+  /token/i,
+  /secret/i,
+  /password/i,
+  /api[_-]?key/i,
+  /authorization/i,
+  /cookie/i,
+  /set-cookie/i,
+  /refresh[_-]?token/i,
+  /client[_-]?secret/i,
+  /service[_-]?role/i,
+  /supabase/i,
+  /mongo/i
+];
+const REDACTED_VALUE = '[REDACTED]';
+const MAX_REDACT_DEPTH = 4;
+
+// Reason: prevent accidental leakage of resolved secrets in log metadata objects.
+function redactSensitiveFields(value, depth = 0, seen = new WeakSet()) {
+  if (depth > MAX_REDACT_DEPTH) return '[TRUNCATED]';
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'object') return value;
+  if (seen.has(value)) return '[CIRCULAR]';
+  seen.add(value);
+
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack
+    };
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => redactSensitiveFields(item, depth + 1, seen));
+  }
+
+  const sanitized = {};
+  for (const [key, fieldValue] of Object.entries(value)) {
+    if (SENSITIVE_KEY_PATTERNS.some(pattern => pattern.test(key))) {
+      sanitized[key] = REDACTED_VALUE;
+      continue;
+    }
+    sanitized[key] = redactSensitiveFields(fieldValue, depth + 1, seen);
+  }
+  return sanitized;
+}
+
+// Reason: sanitize in-place to preserve winston symbol metadata used by transports.
+const redactFormat = winston.format(info => {
+  const redacted = redactSensitiveFields(info);
+  Object.assign(info, redacted);
+  return info;
+});
+
 class SupabaseTransport extends Transport {
   constructor(opts) {
     super(opts);
@@ -49,6 +105,8 @@ const logger = winston.createLogger({
     winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     winston.format.errors({ stack: true }), // Log stack traces
     winston.format.splat(),
+    // Reason: redact sensitive keys after splat/errors so enriched metadata is sanitized.
+    redactFormat(),
     winston.format.json()
   ),
   defaultMeta: { service: 'new-ticket-system' },

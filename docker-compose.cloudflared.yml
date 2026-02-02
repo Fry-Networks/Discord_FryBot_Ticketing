@@ -1,16 +1,21 @@
+# Reason: explicit project name keeps this stack isolated from other compose files in this directory.
+name: cloudflared
+
 services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
     restart: unless-stopped
-    command: tunnel --no-autoupdate run fryticketsdash
-    volumes:
-      - /home/fryadmin/.cloudflared:/etc/cloudflared
+    user: "1001:1001"
+    command: ["tunnel","--config","/etc/cloudflared/config.yml","--no-autoupdate","run"]    
     networks:
-      - frynet
-    user: "1000:1000"
+      - frynet  
+    volumes:
+      - /home/helpdesk/.cloudflared:/etc/cloudflared:ro
 
 networks:
   frynet:
     name: frynet
+    # Reason: shared network across separate compose projects.
+    external: true
     driver: bridge

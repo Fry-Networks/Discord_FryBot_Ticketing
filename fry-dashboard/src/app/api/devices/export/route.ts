@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { serviceSupabase as supabase } from '@/utils/supabase/serviceRole'
 import { logger } from '@/utils/logger'
 import { checkStaffRoleServerSide } from '@/utils/checkStaffRole'
-import { MongoClient } from 'mongodb'
+import { buildMongoClient } from '@/utils/mongoClient'
 
 // Token mapping for CSV export
 const TOKEN_NAMES: Record<string, string> = {
@@ -89,15 +89,19 @@ export async function POST(req: Request) {
 
     // Query devices collection using MongoDB
     const mongoUri = process.env.MONGO_DASH_URI
+    const mongoCaPath = process.env.MONGO_CA_CERT_PATH
     if (!mongoUri) {
       await logger.error('MONGO_DASH_URI environment variable not set', 'export_devices')
       return NextResponse.json({ error: 'Database configuration error' }, { status: 500 })
     }
+    if (!mongoCaPath) {
+      await logger.warn('MONGO_CA_CERT_PATH not set; TLS CA bundle may be missing for MongoDB', 'export_devices')
+    }
 
-    let client: MongoClient | null = null
+    let client: ReturnType<typeof buildMongoClient> | null = null
     try {
       // Connect to MongoDB
-      client = new MongoClient(mongoUri)
+      client = buildMongoClient(mongoUri)
       await client.connect()
       
       const db = client.db('main')

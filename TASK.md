@@ -1,7 +1,39 @@
 # ✅ Task Tracker – Discord Ticketing Rewrite
 
 ## Active Tasks
+- [x] **Enforce OP secret file permissions at container entrypoint (2026-01-31)** - Completed 2026-01-31
+  <!-- Reason: docker compose ignores secret uid/gid/mode; entrypoint validates root:app 0400/0440 -->
+- [x] **Restore Docker stdout logging after logger redaction change (2026-01-31)** - Completed 2026-01-31
+  <!-- Reason: redaction formatter must preserve winston symbol metadata for console transport -->
+- [x] **Harden logging to avoid leaking resolved secrets (2026-01-31)** - Completed 2026-01-31
+  <!-- Reason: add redaction helpers and safe summaries for risky logs -->
+- [x] **Investigate Docker startup failures after hardening changes (2026-01-31)** - Completed 2026-01-31
+  <!-- Reason: op run exits with "expected at least 1 arguments" on container start -->
+- [x] **Implement runtime-only Docker + 1Password secrets injection (2026-01-30)** - Completed 2026-01-30
+  <!-- Reason: switch to docker secret file + runtime op run, remove build-time secret injection -->
+- [x] **Update `scripts/df` to use plain docker compose (2026-01-30)** - Completed 2026-01-30
+  <!-- Reason: prefer runtime-only op in containers; keep host command short -->
+- [x] **Align container runtime UID/GID to 1001 (2026-01-30)** - Completed 2026-01-30
+  <!-- Reason: keep permissions and security posture consistent across repos -->
+- [x] **Add build-time placeholders for Next.js envs (2026-01-30)** - Completed 2026-01-30
+  <!-- Reason: allow next build without injecting secrets -->
+- [x] **Investigate fry-dashboard devices API 500 error (2026-01-26)** - Completed 2026-02-01
+  <!-- Reason: /api/devices returning 500, UI shows "No devices" -->
+- [x] **Investigate Docker Compose orphan container warnings for discofrybot/fry-dashboard/cloudflared (2026-01-26)** - Completed 2026-01-26
+  <!-- Reason: added explicit compose project names to isolate stacks -->
+- [x] **Add short compose helper scripts for discofrybot/cloudflared (2026-01-26)** - Completed 2026-01-26
+  <!-- Reason: user requested shorter commands for isolated stacks -->
+- [x] **Add 5-minute grace window to balance checker alerts on Algonode failures (2026-01-26)** - Completed 2026-01-26
+  <!-- Reason: prevent false 0-balance alerts on transient API hiccups -->
+- [x] **Share frynet across separate compose projects (2026-01-26)** - Completed 2026-01-26
+  <!-- Reason: prevent network ownership warning when stacks run independently -->
 - [ ] **Consolidate env vars & Docker Compose with 1Password (2025-12-19)** - Plan and execute env consolidation for bot and dashboard, remove scattered .env files, move fry-dashboard to sibling folder, and source all secrets from 1Password via Docker Compose.
+- [x] **Point op-compose OP_ENV_FILE default to /root/.op-discobot.env** - Completed 2026-01-18
+  - Updated script default and docs to match root-owned env file location
+- [x] **Load OP service account token from .op-discobot.env in op-compose flow** - Completed 2026-01-18
+  - Reads `.op-discobot.env` before falling back to `op read`
+  - Documented token sourcing in `README.md` and `PLANNING.md`
+  - Clarified compose secret source for `OP_SERVICE_ACCOUNT_TOKEN`
 - [x] **Fix scam detection to work in forum channels and all nested channel types** - Completed 11/9/2025
   - Enhanced channel detection logic in `discofrybot.js` to properly handle forum threads and nested structures
   - Added `isChannelInMonitoredCategory()` function that checks direct parent, grandparent (for forum threads), and full parent chain

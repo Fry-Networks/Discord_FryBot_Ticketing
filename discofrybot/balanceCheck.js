@@ -10,6 +10,9 @@ const LOW_BAL_CHANNEL_ID = process.env.LOW_BAL_CHANNEL_ID;
 
 const DISABLED_ALERT_ASSETS = [];
 
+// Reason: avoid false "0 balance" alerts during transient Algonode/API hiccups.
+const API_FAILURE_GRACE_MS = 5 * 60 * 1000; // 5 minutes
+
 // Persistent thresholds storage
 const notificationThresholds = {
     fNode: { 30000: false, 15000: false, 5000: false },
@@ -31,6 +34,18 @@ const previousBalanceState = {
     TFry: null
 };
 
+const failureStartAt = {
+    fNode: null,
+    Fry2: null,
+    TFry: null
+};
+
+const apiFailureAlertSent = {
+    fNode: false,
+    Fry2: false,
+    TFry: false
+};
+
 // "Critical Alert Sent" Flag
 const criticalAlertSent = {
     fNode: false,
@@ -50,7 +65,7 @@ function handleError(error, context = '') {
 }
 
 // Fetch Algorand asset balance
-async function getAlgorandAssetBalance(address, assetId, retries = 3, delay = 5000) {
+async function getAlgorandAssetBalance(address, assetId, assetKey, retries = 3, delay = 5000) {
     const url = `https://mainnet-idx.algonode.cloud/v2/accounts/${address}`;
     let currentDelay = delay;
 
@@ -62,18 +77,10 @@ async function getAlgorandAssetBalance(address, assetId, retries = 3, delay = 50
             const assets = data.account.assets || [];
             const asset = assets.find(asset => asset['asset-id'] === assetId);
             // logger.info(`✅ Successfully fetched balance: ${asset ? asset.amount / 1_000_000 : 0.0} ${assetId}`);
-            return asset ? asset.amount / 1_000_000 : 0.0;
+            return { balance: asset ? asset.amount / 1_000_000 : 0.0, success: true };
         } catch (error) {
-            logger.error(`❌ API ERROR: ${error.message}`);
-
-            if (attempt === 2) {
-                await sendStaffNotification(
-                    null, // No client yet, handled in sendStaffNotification
-                    `🚨 **API ERROR:** Failed to fetch Algorand balance for ${address}.\nError: ${error.message}\n\nThis may indicate API issues or an attack.`,
-                    "🚨 SYSTEM ALERT",
-                    0xff0000
-                );
-            }
+            // Reason: include asset context to make API failures actionable in logs.
+            logger.error(`❌ API ERROR (${assetKey}): ${error.message}`);
 
             if (attempt < retries) {
                 currentDelay *= 2;
@@ -81,8 +88,17 @@ async function getAlgorandAssetBalance(address, assetId, retries = 3, delay = 50
             }
         }
     }
-    logger.warn("All retry attempts failed. Returning 0 balance.");
-    return 0.0;
+    // Reason: returning null prevents false low-balance alerts on API failures.
+    logger.warn("All retry attempts failed. Returning null balance.");
+    return { balance: null, success: false };
+}
+
+// Reason: format balances safely when API results are missing.
+function formatBalance(balance) {
+    if (typeof balance !== 'number' || isNaN(balance)) {
+        return "unknown";
+    }
+    return balance.toFixed(2);
 }
 
 // Send notification to staff mod channel
@@ -122,10 +138,16 @@ async function sendStaffNotification(client, message, title = "Balance Alert", c
 // Check balances and send notifications
 async function checkBalances(client) {
     const now = Date.now(); 
+    const balanceResults = {
+        fNode: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FNODE, "fNode"),
+        Fry2: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FRY2, "Fry2"),
+        TFry: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_TFRY, "TFry")
+    };
+
     const balances = {
-        fNode: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FNODE),
-        Fry2: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FRY2),
-        TFry: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_TFRY)
+        fNode: balanceResults.fNode.balance,
+        Fry2: balanceResults.Fry2.balance,
+        TFry: balanceResults.TFry.balance
     };
 
     //logger.info(`📊 Balance Check: fNode: ${balances.fNode}, TFry: ${balances.TFry}`);
@@ -138,9 +160,37 @@ async function checkBalances(client) {
     }
 
     for (const [asset, thresholds] of Object.entries(notificationThresholds)) {
+        const result = balanceResults[asset];
         const balance = balances[asset];
         const previousBalance = previousBalanceState[asset];
 
+        if (!result.success) {
+            if (!failureStartAt[asset]) {
+                failureStartAt[asset] = now;
+            }
+
+            const failureDuration = now - failureStartAt[asset];
+            // Reason: suppress low-balance logic during the grace window to prevent false alerts.
+            if (failureDuration < API_FAILURE_GRACE_MS) {
+                continue;
+            }
+
+            if (!apiFailureAlertSent[asset]) {
+                await sendStaffNotification(
+                    client,
+                    `⚠️ **API DEGRADED:** Unable to fetch ${asset} balance for ${Math.round(failureDuration / 1000)}s. Alerts suppressed until API recovers.`,
+                    "⚠️ Balance API Degraded",
+                    0xff9500
+                );
+                apiFailureAlertSent[asset] = true;
+            }
+
+            continue;
+        }
+
+        // Reason: reset failure tracking after a successful read.
+        failureStartAt[asset] = null;
+        apiFailureAlertSent[asset] = false;
         // Defensive check for invalid balance values
         if (typeof balance !== 'number' || isNaN(balance)) {
             logger.error(`❌ Invalid balance value for ${asset}: ${balance}. Skipping alert checks.`);
@@ -213,10 +263,18 @@ async function checkBalances(client) {
 
         let allBalancesAreSafe = true;
         let lowBalanceAssets = [];
+        let unknownAssets = [];
         
         for (const [asset, thresholds] of Object.entries(notificationThresholds)) {
             const balance = balances[asset];
             let assetHasIssues = false;
+
+            // Reason: unknown balances indicate API issues; treat as not safe for status reporting.
+            if (typeof balance !== 'number' || isNaN(balance)) {
+                allBalancesAreSafe = false;
+                unknownAssets.push(asset);
+                continue;
+            }
 
             for (const threshold of Object.keys(thresholds)) {
                 if (balance <= Number(threshold)) {
@@ -235,14 +293,19 @@ async function checkBalances(client) {
         if (allBalancesAreSafe) {
             await sendStaffNotification(
                 client,
-                `✅ All systems running. Balance checker report:\n\n🔹 fNode: ${balances.fNode.toFixed(2)}\n🔹 Fry2: ${balances.Fry2.toFixed(2)}\n🔹 tFRY: ${balances.TFry.toFixed(2)}`,
+                `✅ All systems running. Balance checker report:\n\n🔹 fNode: ${formatBalance(balances.fNode)}\n🔹 Fry2: ${formatBalance(balances.Fry2)}\n🔹 tFRY: ${formatBalance(balances.TFry)}`,
                 "✅ Bot Status Check",
                 0x3498db
             );
         } else {
+            // Reason: keep status report readable when no low balances are detected.
+            const lowBalanceLine = lowBalanceAssets.length > 0
+                ? `\n\n**Low Balance Assets:** ${lowBalanceAssets.join(', ')}`
+                : "\n\n**Low Balance Assets:** none";
+            const unknownLine = unknownAssets.length > 0 ? `\n\n**Unknown Assets:** ${unknownAssets.join(', ')}` : "";
             await sendStaffNotification(
                 client,
-                `⚠️ Balance checker status report:\n\n🔹 fNode: ${balances.fNode.toFixed(2)}\n🔹 Fry2: ${balances.Fry2.toFixed(2)}\n🔹 tFRY: ${balances.TFry.toFixed(2)}\n\n**Low Balance Assets:** ${lowBalanceAssets.join(', ')}\n\n*This is a periodic status report - specific low balance alerts are sent separately.*`,
+                `⚠️ Balance checker status report:\n\n🔹 fNode: ${formatBalance(balances.fNode)}\n🔹 Fry2: ${formatBalance(balances.Fry2)}\n🔹 tFRY: ${formatBalance(balances.TFry)}${lowBalanceLine}${unknownLine}\n\n*This is a periodic status report - specific low balance alerts are sent separately.*`,
                 "⚠️ Bot Status Check (Issues Detected)",
                 0xff9500
             );
@@ -251,10 +314,10 @@ async function checkBalances(client) {
     const hasIssuesOrRefills = notificationMessage || refillMessages.length > 0;
 
     if (hasIssuesOrRefills) {
-        logger.info(`📊 Balance Check (Issue/Refill): fNode: ${balances.fNode.toFixed(2)}, TFry: ${balances.TFry.toFixed(2)}`);
+        logger.info(`📊 Balance Check (Issue/Refill): fNode: ${formatBalance(balances.fNode)}, TFry: ${formatBalance(balances.TFry)}`);
         lastHourlyInfoLogTime = now; // Reset timer if an issue/refill occurred
     } else if (now - lastHourlyInfoLogTime >= HOURLY_LOG_INTERVAL) {
-        logger.info(`📊 Balance Check (Hourly Status): fNode: ${balances.fNode.toFixed(2)}, TFry: ${balances.TFry.toFixed(2)}`);
+        logger.info(`📊 Balance Check (Hourly Status): fNode: ${formatBalance(balances.fNode)}, TFry: ${formatBalance(balances.TFry)}`);
         lastHourlyInfoLogTime = now;
     }
 }
@@ -278,13 +341,19 @@ module.exports = (client) => {
 
 
 async function reportCurrentBalances(client) {
-    const balances = {
-        fNode: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FNODE),
-        Fry2: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FRY2),
-        TFry: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_TFRY),
+    const balanceResults = {
+        fNode: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FNODE, "fNode"),
+        Fry2: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_FRY2, "Fry2"),
+        TFry: await getAlgorandAssetBalance(REWARD_WALLET_ADDRESS, ASSET_ID_TFRY, "TFry"),
     };
 
-    const message = `Current Balances:\n\n🔹 fNode: ${balances.fNode.toFixed(2)}\n🔹 Fry2: ${balances.Fry2.toFixed(2)}\n🔹 tFRY: ${balances.TFry.toFixed(2)}`;
+    const balances = {
+        fNode: balanceResults.fNode.balance,
+        Fry2: balanceResults.Fry2.balance,
+        TFry: balanceResults.TFry.balance,
+    };
+
+    const message = `Current Balances:\n\n🔹 fNode: ${formatBalance(balances.fNode)}\n🔹 Fry2: ${formatBalance(balances.Fry2)}\n🔹 tFRY: ${formatBalance(balances.TFry)}`;
     await sendStaffNotification(client, message, "Current Balance Report", 0x007bff); // Using a blue color for general report
 }
 

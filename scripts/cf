@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Reason: short wrapper for the standalone cloudflared compose stack.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Reason: keep cloudflared isolated by using its dedicated compose file.
+exec docker compose -f "$ROOT_DIR/docker-compose.cloudflared.yml" "$@"

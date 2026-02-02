@@ -53,6 +53,7 @@ A comprehensive Discord bot for managing support tickets, FRY token conversions,
   - Automated closure after 72 hours of user inactivity
   - Screenshot detection and processing
   - Scheduled ticket closure with transcript generation
+  - Balance checker suppresses alerts for 5 minutes on Algonode API failures to avoid false 0-balance warnings
 
 ### 📋 **Transcript & Documentation**
 - **Comprehensive Record Keeping:**
@@ -109,13 +110,15 @@ A comprehensive Discord bot for managing support tickets, FRY token conversions,
 - Discord Bot Token with necessary permissions
 
 ### **Environment & Secrets**
-- No `.env` files are used. All secrets come from 1Password `op://` refs in `docker-compose.yml` (vault: `Discord Bot`; items: `Discofrybot Secrets`, `Tickets Dash Secrets`).
-- Low-sensitivity IDs/maps/avatars live in `/etc/discofrybot/.1p.env` (template at repo root). Keep it `chmod 600` and load via `--env-file /etc/discofrybot/.1p.env`.
-- Preferred helper: `./scripts/op-compose.sh build discofrybot` (or `... up -d`, `... build fry-dashboard`). It injects the 1P token (from `op://Discord Bot/OP_SERVICE_ACCOUNT_TOKEN/credential` if not set) and uses `/etc/discofrybot/.1p.env`.
-- Manual run (if you prefer):  
-  `export OP_SERVICE_ACCOUNT_TOKEN="$(op read 'op://Discord Bot/OP_SERVICE_ACCOUNT_TOKEN/credential')"`  
-  `op run -- docker compose --env-file /etc/discofrybot/.1p.env build`  
-  `op run -- docker compose --env-file /etc/discofrybot/.1p.env up -d`
+- No app `.env` files are used for secrets. All secrets come from 1Password `op://` refs in `docker-compose.yml` (vault: `Discord Bot`; items: `Discofrybot Secrets`, `Tickets Dash Secrets`) and are resolved **at runtime inside the container**.
+- Low-sensitivity IDs/maps/avatars and public build-time values (e.g., `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) live in `/etc/discofrybot/.1p.env` (template at repo root). Keep it `chmod 600` and load via `--env-file /etc/discofrybot/.1p.env`.
+- `OP_SERVICE_ACCOUNT_TOKEN` is provided via a Docker secret file at `/etc/opt/discofrybot/op_service_account_token` (chmod 600, root-owned). Compose mounts it as `op_service_account_token`, and the container entrypoint validates ownership/perms (root:app 0400/0440) before running `op run`.
+<!-- Reason: document MongoDB TLS CA configuration for the dashboard devices APIs. -->
+- `MONGO_CA_CERT_PATH` should point to the MongoDB CA bundle on the host (default `/etc/ssl/mongo/mongo-ca.crt`) and is mounted into the `fry-dashboard` container at the same path for TLS validation.
+  - Ensure host log directories mounted into `/app/logs` are writable by uid/gid 1001.
+- Preferred run:  
+  `docker compose --env-file /etc/discofrybot/.1p.env build`  
+  `docker compose --env-file /etc/discofrybot/.1p.env up -d`
 
 ### **Docker Deployment**
 ```bash
@@ -128,6 +131,10 @@ docker-compose logs -f discofrybot
 # Rebuild after changes
 ./dockrebuild.sh
 ```
+
+### **Compose Helpers**
+- `./scripts/df up -d` (short docker compose wrapper using `/etc/discofrybot/.1p.env`)
+- `./scripts/cf up -d` (Cloudflared stack without 1Password)
 
 ---
 
@@ -190,6 +197,8 @@ docker-compose logs -f discofrybot
 - Staff workload distribution analysis  
 - User engagement and satisfaction metrics
 - Conversion system performance monitoring
+<!-- Reason: document log redaction behavior introduced in shared loggers. -->
+- Runtime loggers redact sensitive keys from metadata before persistence
 
 ---
 

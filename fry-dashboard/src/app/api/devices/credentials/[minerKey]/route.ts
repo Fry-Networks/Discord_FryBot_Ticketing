@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { serviceSupabase as supabase } from '@/utils/supabase/serviceRole'
 import { logger } from '@/utils/logger'
 import { checkStaffRoleServerSide } from '@/utils/checkStaffRole'
-import { MongoClient } from 'mongodb'
+import { buildMongoClient } from '@/utils/mongoClient'
 
 export async function GET(req: Request, { params }: { params: Promise<{ minerKey: string }> }) {
   const { minerKey } = await params
@@ -38,15 +38,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ minerKey
 
     // Query device credentials from creds database using MongoDB
     const mongoUri = process.env.MONGO_DASH_URI
+    const mongoCaPath = process.env.MONGO_CA_CERT_PATH
     if (!mongoUri) {
       await logger.error('MONGO_DASH_URI environment variable not set', 'get_device_credentials')
       return NextResponse.json({ error: 'Database configuration error' }, { status: 500 })
     }
+    if (!mongoCaPath) {
+      await logger.warn('MONGO_CA_CERT_PATH not set; TLS CA bundle may be missing for MongoDB', 'get_device_credentials')
+    }
 
-    let client: MongoClient | null = null
+    let client: ReturnType<typeof buildMongoClient> | null = null
     try {
       // Connect to MongoDB
-      client = new MongoClient(mongoUri)
+      client = buildMongoClient(mongoUri)
       await client.connect()
       
       const credsDb = client.db('creds')

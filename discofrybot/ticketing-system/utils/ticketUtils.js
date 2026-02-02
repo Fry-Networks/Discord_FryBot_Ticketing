@@ -2,13 +2,36 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const logger = require('./logger'); // Import logger
 const supabaseHandler = require('../handlers/supabaseHandler'); // Import for duplicate key checks
 
+// Reason: keep debug logs useful without dumping full ticket payloads.
+function summarizeTicketInfo(ticketInfo) {
+    if (!ticketInfo || typeof ticketInfo !== 'object') {
+        return { hasTicketInfo: false };
+    }
+    return {
+        id: ticketInfo.id,
+        ticketType: ticketInfo.ticket_type,
+        status: ticketInfo.status,
+        channelId: ticketInfo.channel_id
+    };
+}
+
+// Reason: avoid logging raw values that might contain sensitive data.
+function summarizeRawValue(value) {
+    if (value === null || value === undefined) return { type: String(value) };
+    if (typeof value === 'string') return { type: 'string', length: value.length };
+    if (Array.isArray(value)) return { type: 'array', length: value.length };
+    if (typeof value === 'object') return { type: 'object', keys: Object.keys(value).slice(0, 10) };
+    return { type: typeof value, preview: String(value).slice(0, 64) };
+}
+
 /**
  * Helper: builds full action row with dynamic buttons based on ticket state.
  * @param {object} ticketInfo - The ticket information object.
  * @returns {import('discord.js').ActionRowBuilder[]} An array of action row components.
  */
 function getTicketActionRow(ticketInfo) {
-    logger.info(`[DEBUG] getTicketActionRow received ticketInfo:`, ticketInfo);
+    // Reason: avoid logging full ticket objects (may contain user/secret data).
+    logger.info(`[DEBUG] getTicketActionRow received ticketInfo:`, summarizeTicketInfo(ticketInfo));
 
     const baseComponents = [
         new ButtonBuilder()
@@ -205,7 +228,8 @@ function parseJsonSafe(value, options = {}) {
             return JSON.parse(value);
         } catch (err) {
             // Log the raw DB value at info level as requested
-            logger.info(`Failed to parse JSON for ${label || 'value'}. Raw value:`, value);
+            // Reason: only log a safe summary of the raw value to avoid leaking sensitive data.
+            logger.info(`Failed to parse JSON for ${label || 'value'}. Raw value summary:`, summarizeRawValue(value));
             return null;
         }
     }
@@ -213,7 +237,8 @@ function parseJsonSafe(value, options = {}) {
     try {
         return JSON.parse(String(value));
     } catch (err) {
-        logger.info(`Failed to parse JSON for ${label || 'value'} (after coercion). Raw value:`, value);
+        // Reason: only log a safe summary of the raw value to avoid leaking sensitive data.
+        logger.info(`Failed to parse JSON for ${label || 'value'} (after coercion). Raw value summary:`, summarizeRawValue(value));
         return null;
     }
 }

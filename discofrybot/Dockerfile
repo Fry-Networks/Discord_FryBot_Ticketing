@@ -1,17 +1,12 @@
+FROM 1password/op:2@sha256:57d7d6a2bb2b74b2cf8111f6afb2973c74772198f82ea30359a53faae9fff5b1 AS op
+
 FROM node:22
 
 # Keep npm current for security/bugfixes.
-RUN npm install -g npm@latest
+RUN npm install -g npm@11.8.0
 
-# Install 1Password CLI so secrets defined as op:// references are resolved at runtime.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl gnupg \
-  && curl -sS https://downloads.1password.com/linux/keys/1password.asc | gpg --dearmor -o /usr/share/keyrings/1password-archive-keyring.gpg \
-  && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main" > /etc/apt/sources.list.d/1password.list \
-  && apt-get update \
-  && apt-get install -y --no-install-recommends 1password-cli \
-  && apt-get purge -y --auto-remove gnupg \
-  && rm -rf /var/lib/apt/lists/*
+# Reason: copy the 1Password CLI from the official image to avoid ad-hoc downloads.
+COPY --from=op /usr/local/bin/op /usr/local/bin/op
 
 WORKDIR /app
 COPY package*.json ./
@@ -21,10 +16,11 @@ RUN npm ci || npm install
 
 COPY . .
 
-# Ensure the app dir is owned by non-root before switching users.
-RUN chown -R node:node /app
-USER node
+# Reason: standardize on uid/gid 1001 across repos while keeping runtime non-root.
+RUN groupadd -g 1001 app \
+  && useradd -u 1001 -g 1001 -m -s /usr/sbin/nologin app \
+  && chown -R app:app /app
+USER app
 
-# Resolve secrets via op run at start while keeping the runtime non-root.
-# Use node directly since the bot runs via discofrybot.js.
-CMD ["sh", "-c", "op run -- node discofrybot.js"]
+# Reason: runtime secrets are injected via docker-compose entrypoint using op run.
+CMD ["node", "discofrybot.js"]

@@ -616,21 +616,23 @@ const customCommands = [
         name: 'inactivity',
         description: 'Run or preview the inactivity check. Usage: !inactivity scan|run|ticket <id> [--force]',
         execute: async (message, args) => {
-            const STAFF_ROLE_ID = config.staffRoleId;
-            const ADMIN_ROLE_ID = config.adminRoleId;
+            // Reason: restrict inactivity tooling to ticket admins only.
+            const TICKET_ADMIN_ROLE_ID = config.ticketAdminRoleId;
             const client = message.client;
-            const isStaff = message.member && message.member.roles.cache.has(STAFF_ROLE_ID);
-            const isAdmin = message.member && message.member.roles.cache.has(ADMIN_ROLE_ID);
+            const isTicketAdmin = message.member && message.member.roles.cache.has(TICKET_ADMIN_ROLE_ID);
             const replyEphemeral = async (text) => {
                 try { await message.reply({ content: text, flags: MessageFlags.Ephemeral }); } catch { await message.reply(text); }
             };
+
+            if (!isTicketAdmin) {
+                return replyEphemeral('❌ Only ticket admins can run inactivity commands.');
+            }
 
             const sub = (args[0] || 'scan').toLowerCase();
             const force = args.includes('--force') || args.includes('-f');
 
             try {
                 if (sub === 'scan') {
-                    if (!isStaff && !isAdmin) return replyEphemeral("❌ You don't have permission to run this.");
                     const inactiveTickets = await supabaseHandler.getInactiveTicketsRpc();
                     const filtered = (inactiveTickets || []).filter(t => !t.ignore_inactivity);
                     const summaryLines = filtered.slice(0, 25).map(t => {
@@ -644,7 +646,6 @@ const customCommands = [
                 }
 
                 if (sub === 'run') {
-                    if (!isAdmin) return replyEphemeral('❌ Only admins can execute the inactivity run.');
                     if (!force) return replyEphemeral('⚠️ This will send pings and may auto-close tickets. Re-run with `--force` to confirm.');
                     const inactiveTickets = await supabaseHandler.getInactiveTicketsRpc();
                     const filtered = (inactiveTickets || []).filter(t => !t.ignore_inactivity);
@@ -686,15 +687,14 @@ const customCommands = [
                 }
 
                 if (sub === 'ticket') {
-                    if (!isStaff && !isAdmin) return replyEphemeral("❌ You don't have permission to run this.");
                     const target = args[1];
                     if (!target) return replyEphemeral('⚠️ Please provide a ticket id or channel id. Usage: `!inactivity ticket <ticketId|channelId> [--force]`');
                     let ticket = await supabaseHandler.getTicketById(target);
                     if (!ticket) ticket = await supabaseHandler.getTicketByChannelId(target);
                     if (!ticket) return replyEphemeral(`⚠️ Could not find ticket for "${target}".`);
                     const willAutoClose = ticket.last_message_from_role === 'staff' && (ticket.inactivity_ping_count || 0) >= 2;
-                    if (willAutoClose && !isAdmin && !force) {
-                        return replyEphemeral('⚠️ This ticket would be auto-closed by this action. Re-run with `--force` (admins only) or ask an admin to run it.');
+                    if (willAutoClose && !force) {
+                        return replyEphemeral('⚠️ This ticket would be auto-closed by this action. Re-run with `--force` (ticket admins only).');
                     }
                     if (ticket.last_message_from_role === 'staff') {
                         await inactivityPinger.pingUserForInactivity(client, ticket);

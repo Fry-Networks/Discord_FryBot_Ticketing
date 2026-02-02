@@ -431,7 +431,13 @@ if (message.mentions.has(client.user)) {
                 message: userMessage,
                 channelId: message.channel.id
             }, { responseType: 'json' });
-            logger.info("🔍 Debug: Received response from n8n:", response.data); // Debugging line
+            // Reason: avoid logging full n8n response payloads (may contain sensitive data).
+            const responseSummary = {
+                status: response.status,
+                statusText: response.statusText,
+                hasReply: Boolean(response.data?.reply)
+            };
+            logger.info("🔍 Debug: Received response from n8n:", responseSummary); // Debugging line
 
             clearInterval(typingInterval); // Stop typing indicator
 

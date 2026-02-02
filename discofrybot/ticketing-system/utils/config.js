@@ -46,7 +46,8 @@ const config = {
     ticketAdminRoleId: process.env.TICKET_ADMIN_ROLE, // For ticket administration role
 
     // Feature toggles
-    inactivityMonitoringEnabled: process.env.INACTIVITY_MONITORING_ENABLED === 'false',
+    // Reason: explicit "true" enables the scheduler; any other value keeps it disabled.
+    inactivityMonitoringEnabled: process.env.INACTIVITY_MONITORING_ENABLED === 'true',
 
     // Logging
     logChannelId: process.env.LOG_CHANNEL_ID || null,

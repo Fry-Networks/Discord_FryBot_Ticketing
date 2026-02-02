@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Reason: short wrapper around docker compose with the shared low-sensitivity env file.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="${ENV_FILE:-/etc/discofrybot/.1p.env}"
+OP_SECRET_FILE="${OP_SECRET_FILE:-/etc/opt/discofrybot/op_service_account_token}"
+
+# Reason: ensure compose runs from repo root for consistent compose file resolution.
+cd "$ROOT_DIR"
+if [[ ! -r "$OP_SECRET_FILE" ]]; then
+  echo "Error: OP secret file '$OP_SECRET_FILE' is not readable. Set OP_SECRET_FILE or fix permissions." >&2
+  exit 1
+fi
+exec docker compose --env-file "$ENV_FILE" "$@"

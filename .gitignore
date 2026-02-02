@@ -15,7 +15,7 @@
 **/.env.development.local
 **/.env.production.local
 **/.env.test.local
-**/.1p.env
+**/.1p.env*
 # ─────────────────────────────────────
 # 🛠️ Build Outputs
 # ─────────────────────────────────────
@@ -36,6 +36,7 @@ docker-compose.override.yml
 docker-compose.dev.yml
 **/.docker/
 **/Dockerfile.local
+*.example
 
 # ─────────────────────────────────────
 # 🧪 Testing

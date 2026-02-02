@@ -9,6 +9,20 @@ const driveUploader = require('../utils/driveUploader'); // Import driveUploader
 const supabase = require('../supabaseClient');
 const { getTicketActionRow } = require('../utils/ticketUtils');
 
+// Reason: keep debug logs helpful without dumping full ticket records.
+function summarizeTicketData(ticketData) {
+    if (!ticketData || typeof ticketData !== 'object') {
+        return { hasTicketData: false };
+    }
+    return {
+        id: ticketData.id,
+        ticketType: ticketData.ticket_type,
+        status: ticketData.status,
+        channelId: ticketData.channel_id,
+        originalMessageId: ticketData.original_message_id
+    };
+}
+
 /**
  * Handles the "Schedule Close" button interaction.
  * @param {import('discord.js').ButtonInteraction} interaction - The button interaction.
@@ -228,7 +242,8 @@ async function handleScheduledTranscriptPreferenceButton(interaction) {
 
        // Fetch the ticket again to get the original message ID
        const ticketData = await supabaseHandler.getTicketById(ticketId);
-       logger.info(`[DEBUG] ticketData for message update: ${JSON.stringify(ticketData)}`);
+       // Reason: avoid logging full ticket records during schedule debug flow.
+       logger.info(`[DEBUG] ticketData for message update:`, summarizeTicketData(ticketData));
 
        if (!ticketData?.original_message_id) {
            logger.warn(`Could not fetch ticket ${ticketId} or original message ID for adding Cancel/Re-schedule buttons: ${fetchError?.message || 'ID not found'}`);
@@ -323,7 +338,8 @@ async function handleCancelScheduleButton(interaction, ticketId) {
                     if (channel && channel.isTextBased()) {
                         try {
                             const originalMessage = await channel.messages.fetch(ticketData.original_message_id);
-                            logger.info(`[DEBUG] Calling getTicketActionRow with ticketData in handleCancelScheduleButton:`, ticketData);
+                            // Reason: avoid logging full ticket records during action row restoration.
+                            logger.info(`[DEBUG] Calling getTicketActionRow with ticketData in handleCancelScheduleButton:`, summarizeTicketData(ticketData));
                             await originalMessage.edit({
                                 content: 'Staff Actions:',
                                 components: getTicketActionRow(ticketData), // Pass the full ticketData object

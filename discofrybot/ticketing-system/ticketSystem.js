@@ -13,7 +13,8 @@ const screenshotDetectionHandler = require('./handlers/screenshotDetectionHandle
 
 // Define the interval for checking scheduled closures (in milliseconds)
 const SCHEDULED_CLOSURE_CHECK_INTERVAL = 7200000; // Check every 2 hours
-const INACTIVITY_CHECK_INTERVAL = 432100000; // Check every 48 hours
+// Reason: 48-hour cadence for inactivity checks when enabled.
+const INACTIVITY_CHECK_INTERVAL = 48 * 60 * 60 * 1000;
 
 /**
  * Initializes the new ticket system logic.
