@@ -5,6 +5,7 @@ const { formatNumberWithCommas, parseJsonSafe } = require('../utils/ticketUtils'
 const config = require('../utils/config');
 const formValidator = require('../utils/formValidator'); // Import formValidator
 const validationErrorManager = require('../utils/validationErrorManager'); // Import validationErrorManager
+const { maskAddress } = require('../utils/logSanitizer');
 
 /**
  * Creates stage-specific buttons based on conversion progress.
@@ -205,7 +206,7 @@ async function getConversionStatusAndButtons(algorandAddress, ticketId, userId =
             progressData
         };
     } catch (error) {
-        logger.error(`Error getting conversion status for ${algorandAddress}: ${error.message}`, error);
+        logger.error(`Error getting conversion status for ${maskAddress(algorandAddress)}: ${error.message}`, error);
         const errorMessage = userId ? 
             `<@${userId}> ❌ **Error checking conversion status for \`${algorandAddress}\`**\n\nThere was an error retrieving your conversion information. Please try again or contact support.` :
             `❌ **Error checking conversion status for \`${algorandAddress}\`**\n\nThere was an error retrieving your conversion information. Please try again or contact support.`;
@@ -340,7 +341,7 @@ async function handleEligibilityModalSubmit(interaction, ticketId) {
                 hasBurned = Array.isArray(burnTxsForEligibility) && burnTxsForEligibility.length > 0;
             } catch (btErr) {
                 // If the burn tx check fails, log but do not block; fall back to showing warnings based on balance.
-                logger.warn(`Failed to check historical burn transactions for ${algorandAddress}: ${btErr.message}`);
+                logger.warn(`Failed to check historical burn transactions for ${maskAddress(algorandAddress)}: ${btErr.message}`);
                 hasBurned = false;
             }
 
@@ -376,9 +377,10 @@ async function handleEligibilityModalSubmit(interaction, ticketId) {
         }
 
         await interaction.editReply({ content: eligibilityMessage, components: [row] });
-        await supabaseHandler.logBotActivity('info', 'fry_conversion_eligibility_manual', `Ticket ${ticketId}: Manual eligibility check for ${algorandAddress} - ${eligibility.eligible ? 'Eligible' : 'Not Eligible'}.`);
+        // Reason: persist masked wallet identifiers only in bot activity logs.
+        await supabaseHandler.logBotActivity('info', 'fry_conversion_eligibility_manual', `Ticket ${ticketId}: Manual eligibility check for ${maskAddress(algorandAddress)} - ${eligibility.eligible ? 'Eligible' : 'Not Eligible'}.`);
     } catch (error) {
-        logger.error(`Error during manual eligibility check for ticket ${ticketId}, address ${algorandAddress}: ${error.message}`, error);
+        logger.error(`Error during manual eligibility check for ticket ${ticketId}, address ${maskAddress(algorandAddress)}: ${error.message}`, error);
         await interaction.editReply({ content: '⚠️ An error occurred during the eligibility check. Please try again later.' });
     }
 }
@@ -504,14 +506,16 @@ async function handleConversionStatusModalSubmit(interaction, ticketId) {
                             await channel.send({ content: `<@&${config.ticketAdminRoleId}>`, embeds: [staffEmbed] })
                                 .catch(err => logger.error(`Failed to send staff ping to channel ${channelId} for ticket ${ticketId}: ${err.message}`, err));
 
-                            await supabaseHandler.logBotActivity('warn', 'fry_conversion_unregistered_burn', `Ticket ${ticketId}: Unregistered burn detected for ${algorandAddress}. txs=${(progressData.unregisteredBurnTxs || []).map(t => t.txID).join(',')}`);
+                            // Reason: keep unregistered-burn telemetry without storing full tx IDs in persisted logs.
+                            await supabaseHandler.logBotActivity('warn', 'fry_conversion_unregistered_burn', `Ticket ${ticketId}: Unregistered burn detected for ${maskAddress(algorandAddress)}. txCount=${(progressData.unregisteredBurnTxs || []).length}`);
                         }
                     } catch (chErr) {
                         logger.error(`Error fetching channel ${channelId} to notify staff for ticket ${ticketId}: ${chErr.message}`, chErr);
                     }
                 } else {
                     // If no channel found, just log the event
-                    await supabaseHandler.logBotActivity('warn', 'fry_conversion_unregistered_burn', `Ticket ${ticketId}: Unregistered burn detected for ${algorandAddress} but no ticket channel found. txs=${(progressData.unregisteredBurnTxs || []).map(t => t.txID).join(',')}`);
+                    // Reason: keep unregistered-burn telemetry without storing full tx IDs in persisted logs.
+                    await supabaseHandler.logBotActivity('warn', 'fry_conversion_unregistered_burn', `Ticket ${ticketId}: Unregistered burn detected for ${maskAddress(algorandAddress)} but no ticket channel found. txCount=${(progressData.unregisteredBurnTxs || []).length}`);
                 }
 
                 // Send the user-facing message as plain content (so the mention pings), with the same buttons
@@ -521,12 +525,13 @@ async function handleConversionStatusModalSubmit(interaction, ticketId) {
                 await interaction.editReply({ embeds: [embed], components: buttonComponents });
             }
         } catch (notifyErr) {
-            logger.error(`Failed to notify staff about unregistered burn for ticket ${ticketId}, address ${algorandAddress}: ${notifyErr.message}`, notifyErr);
+            logger.error(`Failed to notify staff about unregistered burn for ticket ${ticketId}, address ${maskAddress(algorandAddress)}: ${notifyErr.message}`, notifyErr);
         }
 
-        await supabaseHandler.logBotActivity('info', 'fry_conversion_status_modal_submit', `Ticket ${ticketId}: Conversion status checked via modal for ${algorandAddress}.`);
+        // Reason: persist masked wallet identifiers only in bot activity logs.
+        await supabaseHandler.logBotActivity('info', 'fry_conversion_status_modal_submit', `Ticket ${ticketId}: Conversion status checked via modal for ${maskAddress(algorandAddress)}.`);
         } catch (error) {
-        logger.error(`Error checking conversion status via modal for ticket ${ticketId}, address ${algorandAddress}: ${error.message}`, error);
+        logger.error(`Error checking conversion status via modal for ticket ${ticketId}, address ${maskAddress(algorandAddress)}: ${error.message}`, error);
         await interaction.editReply({ content: '⚠️ An error occurred while checking conversion status. Please try again later.' });
     }
 }
@@ -616,19 +621,21 @@ async function handleBurnTxModalSubmit(interaction, ticketId) {
                 )
                 .setFooter({ text: 'Detected sending to official burn wallet' });
 
-            logger.debug(`Attempting to editReply with burn tx embed for txID=${tx.txID}`);
+            // Reason: avoid logging full transaction identifiers in runtime logs.
+            logger.debug(`Attempting to editReply with burn tx embed for txID=${maskAddress(tx.txID)}`);
             await interaction.editReply({ embeds: [embed] });
         } else {
             const embed = new EmbedBuilder()
                 .setTitle('ℹ️ No Matching Burn Transaction Found')
                 .setColor(0x5865F2)
                 .setDescription(`No FRY 1.0 burn transactions from \`${algorandAddress}\` to the official burn wallet were detected within the last 7 days that match the eligible conversion amount of ${formatNumberWithCommas(eligibleAmount, 6)}.`);
-            logger.debug(`Attempting to editReply with no-burn-tx embed for address=${algorandAddress}`);
+            logger.debug(`Attempting to editReply with no-burn-tx embed for address=${maskAddress(algorandAddress)}`);
             await interaction.editReply({ embeds: [embed] });
         }
-        await supabaseHandler.logBotActivity('info', 'fry_conversion_eligibility_manual', `Ticket ${ticketId}: Manual burn tx check for ${algorandAddress}.`);
+        // Reason: persist masked wallet identifiers only in bot activity logs.
+        await supabaseHandler.logBotActivity('info', 'fry_conversion_eligibility_manual', `Ticket ${ticketId}: Manual burn tx check for ${maskAddress(algorandAddress)}.`);
     } catch (error) {
-        logger.error(`Error during manual burn tx check for ticket ${ticketId}, address ${algorandAddress}: ${error.message}`, error);
+        logger.error(`Error during manual burn tx check for ticket ${ticketId}, address ${maskAddress(algorandAddress)}: ${error.message}`, error);
         // Ensure the error reply also has content
         await interaction.editReply({ content: '⚠️ An error occurred during the burn transaction check. Please try again later.' });
     }

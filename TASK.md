@@ -1,6 +1,18 @@
 # ✅ Task Tracker – Discord Ticketing Rewrite
 
 ## Active Tasks
+- [x] **Route full app logs to daily files and reduce Docker stdout noise (2026-02-14)** - Completed 2026-02-14
+  <!-- Reason: keep warn/error on console while persisting full debug/info/warn/error streams to /app/logs daily files -->
+- [x] **Trim residual FRY conversion bot activity logs (addresses/tx ids) after hardening pass (2026-02-14)** - Completed 2026-02-14
+  <!-- Reason: replace raw Algorand address and tx-id bot_logs payloads in fryConversionHandler with masked address + tx counts -->
+- [x] **Implement discofrybot logging hardening after leak audit (2026-02-14)** - Completed 2026-02-14
+  <!-- Reason: sanitize string logs globally and replace raw content/ticket/key logs with masked summaries -->
+- [x] **Deep audit discofrybot logging for sensitive-data leaks and redaction gaps (2026-02-14)** - Completed 2026-02-14
+  <!-- Reason: confirmed live Docker stdout leaks of full ticket payloads (PII/wallets), AEM/BYOD keys, and message content via debug/info logs -->
+- [x] **Add MongoDB CA bind mount to discofrybot service for FLXtime AEM issuance (2026-02-14)** - Completed 2026-02-14
+  <!-- Reason: AEM key issuance uses MONGO_FLX_URI TLS settings and requires CA bundle inside discofrybot container -->
+- [x] **Investigate FLXtime AEM key issuance MongoDB CA ENOENT error (2026-02-14)** - Completed 2026-02-14
+  <!-- Reason: discofrybot container attempts Mongo TLS with /etc/ssl/mongo/mongo-ca.crt via MONGO_FLX_URI, but CA bundle is only mounted for fry-dashboard -->
 - [x] **Enforce OP secret file permissions at container entrypoint (2026-01-31)** - Completed 2026-01-31
   <!-- Reason: docker compose ignores secret uid/gid/mode; entrypoint validates root:app 0400/0440 -->
 - [x] **Restore Docker stdout logging after logger redaction change (2026-01-31)** - Completed 2026-01-31
@@ -176,6 +188,10 @@
 - [x] `transcriptGenerator.js` and `driveUploader.js` functional and tested
 
 ## Discovered During Work
+- `discofrybot` now writes daily host-mounted log files (`/app/logs/discofrybot-YYYY-MM-DD.log`) while console output defaults to warn/error to reduce Docker log noise (fixed 2026-02-14).
+- `fryConversionHandler` had residual `logBotActivity` writes with raw Algorand addresses and burn tx IDs; now reduced to masked addresses + txCount only (fixed 2026-02-14).
+- `discofrybot` now sanitizes sensitive string patterns (AEM/BYOD keys, wallet-like addresses, emails) in logger pipelines and persists summary-style logs for ticket/message debug paths (fixed 2026-02-14).
+- FLXtime AEM issuance depends on Mongo TLS CA path from `MONGO_FLX_URI`; `discofrybot` now mounts `${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}` like `fry-dashboard` (fixed 2026-02-14).
 - Consider adding rate limiting for ticket creation attempts
 - Add logging for failed validation attempts
 

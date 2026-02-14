@@ -7,7 +7,7 @@ This document outlines the architecture of the **completed** and **actively runn
 
 ## Deployment Notes
 - Bot code now lives under `discofrybot/ticketing-system/`; the `fry-dashboard` Next.js app is a sibling folder at repo root.
-- Environment variables are injected via 1Password `op://` refs defined in `docker-compose.yml` using the `Discord Bot` vault items (`Discofrybot Secrets`, `Tickets Dash Secrets`) plus a low-sensitivity host env file at `/etc/discofrybot/.1p.env` (template in repo). Secrets resolve **at runtime inside containers** using a Docker secret file at `/etc/opt/discofrybot/op_service_account_token` (mounted as `op_service_account_token`); the entrypoint validates ownership/perms (root:app 0400/0440) before running `op run`. The dashboard devices APIs also require a MongoDB CA bundle (`MONGO_CA_CERT_PATH`, default `/etc/ssl/mongo/mongo-ca.crt`) mounted into the container for TLS validation. `./scripts/df <cmd>` remains available for legacy host-side `op run`, but is no longer required for normal builds/starts.
+- Environment variables are injected via 1Password `op://` refs defined in `docker-compose.yml` using the `Discord Bot` vault items (`Discofrybot Secrets`, `Tickets Dash Secrets`) plus a low-sensitivity host env file at `/etc/discofrybot/.1p.env` (template in repo). Secrets resolve **at runtime inside containers** using a Docker secret file at `/etc/opt/discofrybot/op_service_account_token` (mounted as `op_service_account_token`); the entrypoint validates ownership/perms (root:app 0400/0440) before running `op run`. Dashboard devices APIs and FLXtime AEM key issuance both require a MongoDB CA bundle (`MONGO_CA_CERT_PATH`, default `/etc/ssl/mongo/mongo-ca.crt`) mounted into containers for TLS validation. `./scripts/df <cmd>` remains available for legacy host-side `op run`, but is no longer required for normal builds/starts.
 - Cloudflared runs standalone via `./scripts/cf <cmd>` (no 1Password).
 - `frynet` is a shared external Docker network reused across compose projects.
 
@@ -262,8 +262,10 @@ ticketing-system/
 - **Input Validation**: Multi-stage validation with user-friendly feedback
 - **State Management**: Atomic operations preventing data corruption
 - **Performance**: Efficient database queries and minimal Discord API calls
-<!-- Reason: document log redaction behavior introduced in shared loggers. -->
-- **Log Safety**: Sensitive keys are redacted before logs are persisted
+<!-- Reason: document current log redaction and payload-minimization behavior. -->
+- **Log Safety**: Sensitive keys and sensitive string values are sanitized before logs are persisted.
+- **Log Minimization**: Debug/interaction paths prefer compact summaries over raw ticket/message payload dumps.
+- **Log Routing**: Full debug/info/warn/error stream is persisted in daily files under `/app/logs`, while container stdout defaults to warn/error for lower operational noise.
 
 ---
 

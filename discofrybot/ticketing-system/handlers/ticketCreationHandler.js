@@ -10,6 +10,7 @@ const supabaseHandler = require('./supabaseHandler');
 const { getTicketActionRow, formatNumberWithCommas } = require('../utils/ticketUtils'); // Import getTicketActionRow and formatNumberWithCommas
 const fryConversionHandler = require('./fryConversionHandler'); // Import the new conversion handler
 const flxtimePartnersHandler = require('./flxtimePartnersHandler'); // Import the Flxtime Partners handler
+const { maskAddress } = require('../utils/logSanitizer');
 
 const MAX_CHANNELS_PER_CATEGORY = 50;
 
@@ -379,7 +380,7 @@ async function handleTicketModalSubmit(interaction, ticketType) {
                                     );
                                     hasBurned = Array.isArray(burnTxs) && burnTxs.length > 0;
                                 } catch (btErr) {
-                                    logger.warn(`Burn transaction detection failed for ${validatedData.algorandAddress}: ${btErr.message}`);
+                                    logger.warn(`Burn transaction detection failed for ${maskAddress(validatedData.algorandAddress)}: ${btErr.message}`);
                                 }
                                 // If the user has burned FRY 1.0, we don't need to check their current balance
                                 // Build a snapshot + warnings block that matches the canonical output in fryConversionHandler
@@ -437,10 +438,10 @@ async function handleTicketModalSubmit(interaction, ticketType) {
                                 }
 
                                 eligibilityDetails = `\n\n${snapshotContent}\n`;
-                                await supabaseHandler.logBotActivity('info', 'fry_conversion_auto_eligibility_details', `Ticket ${ticketId}: Auto-displayed eligibility details for ${validatedData.algorandAddress}. burned=${hasBurned}`);
+                                await supabaseHandler.logBotActivity('info', 'fry_conversion_auto_eligibility_details', `Ticket ${ticketId}: Auto-displayed eligibility details for ${maskAddress(validatedData.algorandAddress)}. burned=${hasBurned}`);
                             } else {
                                 eligibilityDetails = `\n\n⚠️ **Eligibility Note:** Your Algorand address \`${validatedData.algorandAddress}\` was not found in the eligible snapshot data or is not eligible for conversion.`;
-                                await supabaseHandler.logBotActivity('warn', 'fry_conversion_auto_eligibility_details', `Ticket ${ticketId}: Auto-displayed eligibility details (not eligible) for ${validatedData.algorandAddress}.`);
+                                await supabaseHandler.logBotActivity('warn', 'fry_conversion_auto_eligibility_details', `Ticket ${ticketId}: Auto-displayed eligibility details (not eligible) for ${maskAddress(validatedData.algorandAddress)}.`);
                             }
                         } catch (error) {
                             logger.error(`Error fetching auto-eligibility details for ticket ${ticketId}: ${error.message}`, error);
@@ -478,7 +479,7 @@ async function handleTicketModalSubmit(interaction, ticketType) {
                                     );
                                     hasBurned = Array.isArray(burnTxs) && burnTxs.length > 0;
                                 } catch (btErr) {
-                                    logger.warn(`Burn transaction detection failed for ${validatedData.algorandAddress}: ${btErr.message}`);
+                                    logger.warn(`Burn transaction detection failed for ${maskAddress(validatedData.algorandAddress)}: ${btErr.message}`);
                                 }
 
                                 // Build warnings
@@ -500,10 +501,10 @@ async function handleTicketModalSubmit(interaction, ticketType) {
                                     warnings += `\n✅ **ALGO Balance:** Your available ALGO balance is sufficient for transaction fees.`;
                                 }
                                 lowBalanceWarningMessage = warnings; // Store the warnings for separate message
-                                await supabaseHandler.logBotActivity('info', 'fry_conversion_auto_eligibility_details', `Ticket ${ticketId}: Auto-displayed eligibility details for ${validatedData.algorandAddress}. burned=${hasBurned}`);
+                                await supabaseHandler.logBotActivity('info', 'fry_conversion_auto_eligibility_details', `Ticket ${ticketId}: Auto-displayed eligibility details for ${maskAddress(validatedData.algorandAddress)}. burned=${hasBurned}`);
                             } else {
                                 lowBalanceWarningMessage = `⚠️ **Eligibility Note:** Your Algorand address \`${validatedData.algorandAddress}\` was not found in the eligible snapshot data or is not eligible for conversion.`;
-                                await supabaseHandler.logBotActivity('warn', 'fry_conversion_auto_eligibility_details', `Ticket ${ticketId}: Auto-displayed eligibility details (not eligible) for ${validatedData.algorandAddress}.`);
+                                await supabaseHandler.logBotActivity('warn', 'fry_conversion_auto_eligibility_details', `Ticket ${ticketId}: Auto-displayed eligibility details (not eligible) for ${maskAddress(validatedData.algorandAddress)}.`);
                             }
                         } catch (error) {
                             logger.error(`Error fetching auto-eligibility details for ticket ${ticketId}: ${error.message}`, error);
@@ -637,7 +638,8 @@ async function handleTicketModalSubmit(interaction, ticketType) {
                                     await ticketChannel.send({ content: `<@&${config.ticketAdminRoleId}>`, embeds: [staffEmbed] })
                                         .catch(err => logger.error(`Failed to send staff ping to channel ${ticketChannel.id} for ticket ${ticketId}: ${err.message}`, err));
 
-                                    await supabaseHandler.logBotActivity('warn', 'fry_conversion_unregistered_burn', `Ticket ${ticketId}: Unregistered burn detected for ${validatedData.algorandAddress}. txs=${(progressData.unregisteredBurnTxs || []).map(t => t.txID).join(',')}`);
+                                    // Reason: log only count instead of full TX list to reduce sensitive-detail exposure.
+                                    await supabaseHandler.logBotActivity('warn', 'fry_conversion_unregistered_burn', `Ticket ${ticketId}: Unregistered burn detected for ${maskAddress(validatedData.algorandAddress)}. txCount=${(progressData.unregisteredBurnTxs || []).length}`);
 
                                   /* // Now send the user-facing message as plain content so the mention pings are noticed,
                                     // then send the action buttons underneath.
@@ -678,10 +680,10 @@ async function handleTicketModalSubmit(interaction, ticketType) {
                                 }                               
                                 //***************************//
                             } catch (notifyErr) {
-                                logger.error(`Failed to handle staff/user notification for ticket ${ticketId}, address ${validatedData.algorandAddress}: ${notifyErr.message}`, notifyErr);
+                                logger.error(`Failed to handle staff/user notification for ticket ${ticketId}, address ${maskAddress(validatedData.algorandAddress)}: ${notifyErr.message}`, notifyErr);
                             }
                                                                                     
-                            await supabaseHandler.logBotActivity('info', 'fry_conversion_auto_status', `Ticket ${ticketId}: Automated conversion status check for ${validatedData.algorandAddress}.`);
+                            await supabaseHandler.logBotActivity('info', 'fry_conversion_auto_status', `Ticket ${ticketId}: Automated conversion status check for ${maskAddress(validatedData.algorandAddress)}.`);
                         } catch (error) {
                             logger.error(`Error during automated conversion status check for ticket ${ticketId}: ${error.message}`, error);
                             await ticketChannel.send({ content: '⚠️ **Error:** Unable to automatically check conversion status. Please use the manual check buttons above.' }).catch(err => logger.error(`Failed to send error message to ${ticketChannel.id}`, err));

@@ -10,6 +10,7 @@ const { registerSlashCommands } = require('./utils/slashCommandManager'); // Imp
 const inactivityPinger = require('./modules/inactivityPinger'); // Import inactivity pinger module
 const flxtimePartnersHandler = require('./handlers/flxtimePartnersHandler'); // Import Flxtime Partners handler
 const screenshotDetectionHandler = require('./handlers/screenshotDetectionHandler'); // Import screenshot detection handler
+const { summarizeMessageContent } = require('./utils/logSanitizer');
 
 // Define the interval for checking scheduled closures (in milliseconds)
 const SCHEDULED_CLOSURE_CHECK_INTERVAL = 7200000; // Check every 2 hours
@@ -46,7 +47,9 @@ function initializeTicketSystem(client, prefix) {
 
         // Ignore messages that are commands
         if (message.content.startsWith(prefix)) {
-            logger.info(`Ignoring command message "${message.content}" from ${message.author.tag} for logging.`);
+            // Reason: avoid logging full command text (may include sensitive arguments).
+            const messageSummary = summarizeMessageContent(message.content);
+            logger.info(`Ignoring command message from ${message.author.tag} for logging (length: ${messageSummary.length}).`);
             return;
         }
         

@@ -6,6 +6,7 @@ const supabaseHandler = require('./ticketing-system/handlers/supabaseHandler'); 
 const { extractAndValidateUrls, normalizeMessage } = require('./messageFilter'); // Import the filtering logic
 const config = require('./ticketing-system/utils/config'); // Add this import
 const { handlePrefixCommand } = require('./ticketing-system/commands/customCommands'); // Import the prefix command handler
+const { summarizeMessageContent } = require('./ticketing-system/utils/logSanitizer');
 
 // Configuration from .env
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -141,14 +142,12 @@ client.on('messageCreate', async (message) => {
     // AND the channel is NOT in the monitored category, ignore it.
     const isInMonitoredCategory = isChannelInMonitoredCategory(message.channel, monitoredCategoryId);
     if ((!isCommand || (isCommand && !isStaff)) && !isInMonitoredCategory) {
-        logger.info(`Ignoring message "${message.content}" from ${message.author.tag} in channel ${message.channel.name} (Parent ID: ${message.channel.parentId}, Type: ${message.channel.type}) because it's not a staff command and not in the monitored category.`);
+        // Reason: avoid logging raw user content in docker/app logs.
+        const messageSummary = summarizeMessageContent(message.content);
+        logger.info(`Ignoring non-monitored message from ${message.author.tag} in channel ${message.channel.name} (Parent ID: ${message.channel.parentId}, Type: ${message.channel.type}, length: ${messageSummary.length}) because it's not a staff command and not in the monitored category.`);
         return;
     }
     // ----------------------------------
-
-    // --- Existing logging line (keep this) ---
-    logger.info(`[RAW MESSAGE CONTENT] from ${message.author.tag} (ID: ${message.author.id}): "${message.content}"`);
-    // -----------------------------------------
 
     // Ignore messages from bots (if you commented this out, it will process bot messages)
     // if (message.author.bot) return;
@@ -167,16 +166,16 @@ client.on('messageCreate', async (message) => {
     // Use the imported normalizeMessage function
     const normalizedContent = normalizeMessage(rawContent);
 
-    logger.info(`Received message from ${message.author.tag}: "${rawContent}"`);
-    logger.info(`Normalized message: "${normalizedContent}"`);
+    // Reason: keep detection telemetry without storing raw user message payloads.
+    const rawSummary = summarizeMessageContent(rawContent);
+    const normalizedSummary = summarizeMessageContent(normalizedContent);
+    logger.info(`Received message from ${message.author.tag} (raw length: ${rawSummary.length}, normalized length: ${normalizedSummary.length}).`);
 
     // Use the imported extractAndValidateUrls function and pass the guild ID
     const detectionResult = extractAndValidateUrls(normalizedContent, message.guild.id); // Pass guild ID
 
     if (detectionResult.isSuspicious) {
         logger.warn(`🚨 Suspicious pattern detected from ${message.author.tag} (ID: ${message.author.id}) in channel ${message.channel.name} (ID: ${message.channel.id}). Type: ${detectionResult.type}`);
-        logger.warn(`Original message: "${rawContent}"`);
-        logger.warn(`Normalized message: "${normalizedContent}"`);
         if (detectionResult.pattern) logger.warn(`Detected pattern: "${detectionResult.pattern}"`);
         if (detectionResult.domain) logger.warn(`Detected domain: "${detectionResult.domain}"`);
 

@@ -4,6 +4,12 @@ const logger = require('../utils/logger');
 const axios = require('axios');
 const config = require('../utils/config');
 const { formatNumberWithCommas } = require('../utils/ticketUtils');
+const {
+    maskAddress,
+    sanitizeSecretsInText,
+    summarizeTicketForLog,
+    summarizeTicketUpdates
+} = require('../utils/logSanitizer');
 
 /**
  * Checks if a Discord channel exists.
@@ -431,14 +437,15 @@ async function getTicketById(ticketId) {
             .eq('id', ticketId)
             .maybeSingle(); // Changed to .maybeSingle()
 
-        logger.info(`[DEBUG] getTicketById result for ticketId=${ticketId}: data=${JSON.stringify(data)}, error=${error?.message}`);
+        // Reason: keep diagnostics while avoiding full ticket payload logging.
+        logger.info(`[DEBUG] getTicketById result for ticketId=${ticketId}: found=${Boolean(data)}, error=${error?.message || 'none'}, summary=${JSON.stringify(summarizeTicketForLog(data))}`);
 
         if (error) {
             logger.error(`Error fetching ticket by ID ${ticketId}: ${error.message}`, error);
             throw error;
         }
 
-        logger.info(`[DEBUG] getTicketById - Returning data for ticketId=${ticketId}: ${JSON.stringify(data)}`);
+        logger.info(`[DEBUG] getTicketById returning summary for ticketId=${ticketId}: ${JSON.stringify(summarizeTicketForLog(data))}`);
         return data; // Returns the ticket object if found, or null otherwise
     } catch (err) {
         logger.error(`Exception in getTicketById for ticket ${ticketId}: ${err.message}`, err);
@@ -490,7 +497,8 @@ async function updateTicket(ticketId, updates) {
             logger.error(`Error updating ticket ${ticketId}: ${error.message}`, error);
             throw error;
         }
-        logger.info(`Ticket ${ticketId} updated with:`, updates);
+        // Reason: avoid logging raw update payload values (may include keys, wallets, or PII).
+        logger.info(`Ticket ${ticketId} updated fields summary:`, summarizeTicketUpdates(updates));
         return data;
     } catch (err) {
         logger.error(`Exception in updateTicket for ticket ${ticketId}: ${err.message}`, err);
@@ -515,10 +523,12 @@ async function logStaffAction(ticketId, staffId, action) {
     }
 
     try {
+        // Reason: normalize sensitive values before persisting action text.
+        const sanitizedAction = sanitizeSecretsInText(action);
         const record = {
             ticket_id: numericTicketId,
             staff_id: staffId,
-            action,
+            action: sanitizedAction,
             timestamp: new Date().toISOString()
         };
 
@@ -533,7 +543,7 @@ async function logStaffAction(ticketId, staffId, action) {
             throw error;
         }
 
-        logger.info(`Logged staff action for ticket ${ticketId} by ${staffId}: ${action}`);
+        logger.info(`Logged staff action for ticket ${ticketId} by ${staffId}: ${sanitizedAction}`);
         return data;
     } catch (err) {
         logger.error(`Exception in logStaffAction for ticket ${ticketId}: ${err.message}`, err);
@@ -687,9 +697,11 @@ async function getTicketByChannelId(channelId) {
  */
 async function logBotActivity(level, scope, message) {
     try {
+        // Reason: sanitize free-form activity text before persisting to bot_logs.
+        const sanitizedMessage = sanitizeSecretsInText(message);
         const { data, error } = await supabase
             .from('bot_logs') // Ensure this table name is correct
-            .insert([{ level, scope, message }])
+            .insert([{ level, scope, message: sanitizedMessage }])
             .select()
             .single();
 
@@ -809,7 +821,8 @@ async function deleteTicketMessage(discordMessageId) {
  * @returns {Promise<object>} An object indicating eligibility (e.g., { eligible: true, balance: 100000 } or { eligible: false }).
  */
 async function checkConversionEligibility(algorandAddress) {
-    logger.info(`Checking conversion eligibility for Algorand address: ${algorandAddress}`);
+    // Reason: avoid logging full wallet identifiers in runtime logs.
+    logger.info(`Checking conversion eligibility for Algorand address (masked): ${maskAddress(algorandAddress)}`);
     try {
         const { data, error } = await supabase
             .from('conversion_eligibility_mirror') // Query the new table
@@ -818,7 +831,7 @@ async function checkConversionEligibility(algorandAddress) {
             .maybeSingle();
 
         if (error) {
-            logger.error(`Error checking conversion eligibility for ${algorandAddress}: ${error.message}`, error);
+            logger.error(`Error checking conversion eligibility for ${maskAddress(algorandAddress)}: ${error.message}`, error);
             return { eligible: false, error: error.message };
         }
 
@@ -831,7 +844,7 @@ async function checkConversionEligibility(algorandAddress) {
             return { eligible: false, data: null };
         }
     } catch (err) {
-        logger.error(`Exception in checkConversionEligibility for ${algorandAddress}: ${err.message}`, err);
+        logger.error(`Exception in checkConversionEligibility for ${maskAddress(algorandAddress)}: ${err.message}`, err);
         return { eligible: false, error: err.message };
     }
 }
@@ -848,13 +861,13 @@ async function getFry1Balance(address) {
         if (error.response) {
             // The request was made and the server responded with a status code
             // that falls out of the range of 2xx
-            logger.error(`Axios Error for FRY 1.0 balance (${address}): Status ${error.response.status}, Data:`, error.response.data);
+            logger.error(`Axios Error for FRY 1.0 balance (${maskAddress(address)}): Status ${error.response.status}.`);
         } else if (error.request) {
             // The request was made but no response was received
-            logger.error(`Axios Error for FRY 1.0 balance (${address}): No response received. Request:`, error.request);
+            logger.error(`Axios Error for FRY 1.0 balance (${maskAddress(address)}): No response received.`);
         } else {
             // Something happened in setting up the request that triggered an Error
-            logger.error(`Axios Error for FRY 1.0 balance (${address}): Request setup error. Message:`, error.message);
+            logger.error(`Axios Error for FRY 1.0 balance (${maskAddress(address)}): Request setup error: ${error.message}`);
         }
         return 0; // Return 0 on any error
     }
@@ -874,11 +887,11 @@ async function getAlgoBalance(address) {
         return response.data.amount / 1_000_000;
     } catch (error) {
         if (error.response) {
-            logger.error(`Axios Error for ALGO balance (${address}): Status ${error.response.status}, Data:`, error.response.data);
+            logger.error(`Axios Error for ALGO balance (${maskAddress(address)}): Status ${error.response.status}.`);
         } else if (error.request) {
-            logger.error(`Axios Error for ALGO balance (${address}): No response received. Request:`, error.request);
+            logger.error(`Axios Error for ALGO balance (${maskAddress(address)}): No response received.`);
         } else {
-            logger.error(`Axios Error for ALGO balance (${address}): Request setup error. Message:`, error.message);
+            logger.error(`Axios Error for ALGO balance (${maskAddress(address)}): Request setup error: ${error.message}`);
         }
         return 0;
     }
@@ -898,11 +911,11 @@ async function getLockedAlgoBalance(address) {
         return response.data['min-balance'] / 1_000_000;
     } catch (error) {
         if (error.response) {
-            logger.error(`Axios Error for locked ALGO balance (${address}): Status ${error.response.status}, Data:`, error.response.data);
+            logger.error(`Axios Error for locked ALGO balance (${maskAddress(address)}): Status ${error.response.status}.`);
         } else if (error.request) {
-            logger.error(`Axios Error for locked ALGO balance (${address}): No response received. Request:`, error.request);
+            logger.error(`Axios Error for locked ALGO balance (${maskAddress(address)}): No response received.`);
         } else {
-            logger.error(`Axios Error for locked ALGO balance (${address}): Request setup error. Message:`, error.message);
+            logger.error(`Axios Error for locked ALGO balance (${maskAddress(address)}): Request setup error: ${error.message}`);
         }
         return 0;
     }
@@ -946,14 +959,14 @@ async function checkBurnTransaction(senderAddress, eligibleAmount, timeframeDays
                 response = await axios.get(indexerBase, { params });
             } catch (err) {
                 // If indexer fails, fallback to the non-indexer transactions endpoint for a single page and stop paging
-                logger.warn(`Indexer transactions endpoint failed for ${senderAddress} (page ${pageCount}), falling back to standard transactions endpoint: ${err.message}`);
+                logger.warn(`Indexer transactions endpoint failed for ${maskAddress(senderAddress)} (page ${pageCount}), falling back to standard transactions endpoint: ${err.message}`);
                 try {
                     response = await axios.get(`https://mainnet-api.algonode.cloud/v2/accounts/${senderAddress}/transactions`, { params: { limit: 1000 } });
                     // After fallback single page, do not attempt further pages
                     nextToken = null;
                     keepPaging = false;
                 } catch (innerErr) {
-                    logger.error(`Both indexer and standard transactions endpoints failed for ${senderAddress}: ${innerErr.message}`, innerErr);
+                    logger.error(`Both indexer and standard transactions endpoints failed for ${maskAddress(senderAddress)}: ${innerErr.message}`, innerErr);
                     break;
                 }
             }
@@ -999,14 +1012,14 @@ async function checkBurnTransaction(senderAddress, eligibleAmount, timeframeDays
 
     } catch (error) {
         if (error.response) {
-            logger.error(`Axios Error for burn transactions (${senderAddress}): Status ${error.response.status}, Data:`, error.response.data);
+            logger.error(`Axios Error for burn transactions (${maskAddress(senderAddress)}): Status ${error.response.status}.`);
             if (error.response.status === 404) {
-                logger.error(`Account ${senderAddress} not found or has no transactions`);
+                logger.error(`Account ${maskAddress(senderAddress)} not found or has no transactions`);
             }
         } else if (error.request) {
-            logger.error(`Axios Error for burn transactions (${senderAddress}): No response received. Request:`, error.request);
+            logger.error(`Axios Error for burn transactions (${maskAddress(senderAddress)}): No response received.`);
         } else {
-            logger.error(`Axios Error for burn transactions (${senderAddress}): Request setup error. Message:`, error.message);
+            logger.error(`Axios Error for burn transactions (${maskAddress(senderAddress)}): Request setup error: ${error.message}`);
         }
     }
 
@@ -1019,7 +1032,8 @@ async function checkBurnTransaction(senderAddress, eligibleAmount, timeframeDays
  * @returns {Promise<object>} An object with mirror data or null if not found.
  */
 async function getConversionMirrorStatus(algorandAddress) {
-    logger.info(`Checking conversion mirror status for Algorand address: ${algorandAddress}`);
+    // Reason: avoid logging full wallet identifiers in runtime logs.
+    logger.info(`Checking conversion mirror status for Algorand address (masked): ${maskAddress(algorandAddress)}`);
     try {
         const { data, error } = await supabase
             .from('conversion_eligibility_mirror')
@@ -1028,7 +1042,7 @@ async function getConversionMirrorStatus(algorandAddress) {
             .maybeSingle();
 
         if (error) {
-            logger.error(`Error checking conversion mirror status for ${algorandAddress}: ${error.message}`, error);
+            logger.error(`Error checking conversion mirror status for ${maskAddress(algorandAddress)}: ${error.message}`, error);
             return { found: false, error: error.message };
         }
 
@@ -1038,7 +1052,7 @@ async function getConversionMirrorStatus(algorandAddress) {
             return { found: false, data: null };
         }
     } catch (err) {
-        logger.error(`Exception in getConversionMirrorStatus for ${algorandAddress}: ${err.message}`, err);
+        logger.error(`Exception in getConversionMirrorStatus for ${maskAddress(algorandAddress)}: ${err.message}`, err);
         return { found: false, error: err.message };
     }
 }
@@ -1221,7 +1235,7 @@ async function getConversionProgress(algorandAddress, currentDate = new Date()) 
                 }
             }
         } catch (burnCheckErr) {
-            logger.warn(`Burn detection failed for ${algorandAddress}: ${burnCheckErr.message}`);
+            logger.warn(`Burn detection failed for ${maskAddress(algorandAddress)}: ${burnCheckErr.message}`);
             // Do not fail the whole progress check if burn detection fails; proceed without marking.
         }
                 
@@ -1238,7 +1252,7 @@ async function getConversionProgress(algorandAddress, currentDate = new Date()) 
         };
         
     } catch (err) {
-        logger.error(`Exception in getConversionProgress for ${algorandAddress}: ${err.message}`, err);
+        logger.error(`Exception in getConversionProgress for ${maskAddress(algorandAddress)}: ${err.message}`, err);
         return {
             found: false,
             stage: null,
@@ -1275,7 +1289,7 @@ async function checkFlxtimeKeyHistory(userId) {
 
         if (data && data.length > 0) {
             const previousTicket = data[0];
-            logger.info(`Found previous AEM key for user ${userId}: ticket ${previousTicket.id}, key: ${previousTicket.aem_key_issued}`);
+            logger.info(`Found previous AEM key record for user ${userId}: ticket ${previousTicket.id}`);
             return {
                 hasKey: true,
                 previousTicket: {

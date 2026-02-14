@@ -2,6 +2,8 @@
 const winston = require('winston');
 const Transport = require('winston-transport');
 const supabase = require('../supabaseClient'); // Adjusted path to the new Supabase client
+const { sanitizeSecretsInText } = require('./logSanitizer');
+const DailyFileTransport = require('./dailyFileTransport');
 
 // Reason: redact sensitive keys in structured log payloads before they hit stdout/Supabase.
 const SENSITIVE_KEY_PATTERNS = [
@@ -16,7 +18,17 @@ const SENSITIVE_KEY_PATTERNS = [
   /client[_-]?secret/i,
   /service[_-]?role/i,
   /supabase/i,
-  /mongo/i
+  /mongo/i,
+  /email/i,
+  /full[_-]?name/i,
+  /username/i,
+  /algorand/i,
+  /solana/i,
+  /wallet/i,
+  /address/i,
+  /minerkeys?/i,
+  /aem[_-]?key/i,
+  /byod/i
 ];
 const REDACTED_VALUE = '[REDACTED]';
 const MAX_REDACT_DEPTH = 4;
@@ -25,6 +37,8 @@ const MAX_REDACT_DEPTH = 4;
 function redactSensitiveFields(value, depth = 0, seen = new WeakSet()) {
   if (depth > MAX_REDACT_DEPTH) return '[TRUNCATED]';
   if (value === null || value === undefined) return value;
+  // Reason: sanitize plain-text log strings because sensitive data is often interpolated into message text.
+  if (typeof value === 'string') return sanitizeSecretsInText(value);
   if (typeof value !== 'object') return value;
   if (seen.has(value)) return '[CIRCULAR]';
   seen.add(value);
@@ -111,11 +125,20 @@ const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'new-ticket-system' },
   transports: [
+    // Reason: keep container stdout focused on actionable issues only.
     new winston.transports.Console({
+      level: process.env.CONSOLE_LOG_LEVEL || 'warn',
       format: winston.format.combine(
         winston.format.colorize(),
         winston.format.simple()
       )
+    }),
+    // Reason: capture full ticket-system telemetry in persistent daily files.
+    new DailyFileTransport({
+      level: process.env.FILE_LOG_LEVEL || process.env.LOG_LEVEL || 'debug',
+      logDir: process.env.LOG_DIR || '/app/logs',
+      filePrefix: 'discofrybot',
+      maxFiles: 30
     }),
     new SupabaseTransport({}) // Pass empty opts or specific opts if needed
   ]

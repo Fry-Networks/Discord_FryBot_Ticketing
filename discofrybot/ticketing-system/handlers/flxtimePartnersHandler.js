@@ -4,6 +4,7 @@ const config = require('../utils/config');
 const logger = require('../utils/logger');
 const supabaseHandler = require('./supabaseHandler');
 const { getTicketActionRow } = require('../utils/ticketUtils');
+const { sanitizeSecretsInText } = require('../utils/logSanitizer');
 
 // MongoDB connection for device storage
 const { MongoClient } = require('mongodb');
@@ -306,8 +307,8 @@ async function handleIssueAemKeyButton(interaction, ticketId) {
             aem_key_issued_by: staffUsername
         });
 
-        // Log the action
-        await supabaseHandler.logStaffAction(ticketId, staffId, `${staffUsername} issued AEM key: ${aemKey}`);
+        // Reason: avoid persisting full AEM credentials in staff action logs.
+        await supabaseHandler.logStaffAction(ticketId, staffId, `${staffUsername} issued AEM key`);
 
         // Send key to ticket channel
         const channel = await interaction.client.channels.fetch(ticket.channel_id);
@@ -387,7 +388,7 @@ If you have no further questions, you can close the ticket using the button belo
             content: `✅ **AEM Key Issued Successfully!**\n\n**Key:** \`${aemKey}\`\n\nThe key has been posted to the ticket channel and stored in the database with all necessary internal details.`
         });
 
-        logger.info(`AEM key ${aemKey} issued successfully for ticket ${ticketId} by ${staffUsername}`);
+        logger.info(`AEM key issuance completed for ticket ${ticketId} by ${staffUsername}`);
     } catch (error) {
         logger.error(`Error issuing AEM key for ticket ${ticketId}: ${error.message}`, error);
         if (interaction.deferred) {
@@ -424,12 +425,12 @@ async function generateUniqueAemKey() {
         // Check if key already exists in MongoDB
         const exists = await checkAemKeyExists(key);
         if (!exists) {
-            logger.info(`Generated unique AEM key: ${key}`);
+            logger.info(`Generated unique AEM key for issuance flow.`);
             return key;
         }
         
         attempts++;
-        logger.warn(`AEM key collision detected: ${key}. Attempt ${attempts}/${maxAttempts}`);
+        logger.warn(`AEM key collision detected during issuance flow. Attempt ${attempts}/${maxAttempts}`);
     }
     
     throw new Error('Failed to generate unique AEM key after maximum attempts');
@@ -456,12 +457,12 @@ async function generateUniqueByodKey() {
         // Check if license already exists in MongoDB
         const exists = await checkByodLicenseExists(license);
         if (!exists) {
-            logger.info(`Generated unique BYOD license: ${license}`);
+            logger.info(`Generated unique BYOD license for issuance flow.`);
             return license;
         }
         
         attempts++;
-        logger.warn(`BYOD license collision detected: ${license}. Attempt ${attempts}/${maxAttempts}`);
+        logger.warn(`BYOD license collision detected during issuance flow. Attempt ${attempts}/${maxAttempts}`);
     }
     
     throw new Error('Failed to generate unique BYOD license after maximum attempts');
@@ -489,7 +490,7 @@ async function checkAemKeyExists(key) {
         const existing = await collection.findOne({ miner_key: key });
         return !!existing;
     } catch (error) {
-        logger.error(`Error checking AEM key existence: ${error.message}`, error);
+        logger.error(`Error checking AEM key existence: ${sanitizeSecretsInText(error.message)}`, error);
         return false;
     } finally {
         if (client) {
@@ -520,7 +521,7 @@ async function checkByodLicenseExists(license) {
         const existing = await collection.findOne({ byod: license });
         return !!existing;
     } catch (error) {
-        logger.error(`Error checking BYOD license existence: ${error.message}`, error);
+        logger.error(`Error checking BYOD license existence: ${sanitizeSecretsInText(error.message)}`, error);
         return false;
     } finally {
         if (client) {

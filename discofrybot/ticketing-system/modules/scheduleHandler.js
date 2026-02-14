@@ -206,14 +206,13 @@ async function handleScheduledTranscriptPreferenceButton(interaction) {
            await interaction.followUp({ content: '⚠️ An error occurred while saving the schedule to the database.', flags: MessageFlags.Ephemeral });
            return;
        }
-        // === Debug block: Fetch full row after update ===
+        // Reason: verify update without dumping full ticket payload fields into runtime logs.
         const fetchTest = await supabase
             .from('tickets')
-            .select('*') // get all columns
+            .select('id, ticket_type, status, channel_id, original_message_id')
             .eq('id', ticketId)
             .maybeSingle();
-        logger.info(`[DEBUG] Raw fetch after update: ${JSON.stringify(fetchTest)}`);
-        // === End debug block ===
+        logger.info(`[DEBUG] Post-update fetch summary:`, summarizeTicketData(fetchTest?.data));
        logger.info(`Ticket ${ticketId} scheduled to close at ${scheduledCloseAt} with preference ${transcriptPreference} via preference button.`);
 
        // Fetch the channel object and move it to the closed category

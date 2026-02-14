@@ -5,6 +5,7 @@ const inactivityPinger = require('../modules/inactivityPinger');
 const { getTicketActionRow } = require('../utils/ticketUtils');
 const logger = require('../utils/logger');
 const config = require('../utils/config');
+const { maskAddress, summarizeMessageContent } = require('../utils/logSanitizer');
 
 // Define prefix commands
 const customCommands = [
@@ -592,10 +593,11 @@ const customCommands = [
                 // Update ticket with the address if it was provided as argument
                 if (args.length > 0 && algorandAddress !== ticket.algorand_address) {
                     await supabaseHandler.updateTicket(ticketId, { algorand_address: algorandAddress });
-                    logger.info(`Updated ticket ${ticketId} with Algorand address: ${algorandAddress}`);
+                    // Reason: log masked addresses only to avoid leaking wallet identifiers in runtime logs.
+                    logger.info(`Updated ticket ${ticketId} with Algorand address (masked): ${maskAddress(algorandAddress)}`);
                 }
 
-                logger.info(`Added automated conversion status and buttons to ticket ${ticketId} for address ${algorandAddress}.`);
+                logger.info(`Added automated conversion status and buttons to ticket ${ticketId} for address (masked): ${maskAddress(algorandAddress)}.`);
                 try {
                     await message.reply({ content: `✅ Added automated conversion status and stage-specific buttons for \`${algorandAddress}\` to ticket \`${ticketId}\`.`, flags: MessageFlags.Ephemeral });
                 } catch {
@@ -848,7 +850,9 @@ async function handlePrefixCommand(message, prefix) {
             try {
                 await message.delete(); // Delete the command message
             } catch (deleteError) {
-                logger.warn(`Failed to delete command message "${message.content}" from ${message.author.tag}: ${deleteError.message}`);
+                // Reason: avoid logging raw command content in failure paths.
+                const messageSummary = summarizeMessageContent(message.content);
+                logger.warn(`Failed to delete command message from ${message.author.tag} (length: ${messageSummary.length}): ${deleteError.message}`);
             }
             return true; // Command was found and executed
         } catch (error) {

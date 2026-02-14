@@ -113,8 +113,8 @@ A comprehensive Discord bot for managing support tickets, FRY token conversions,
 - No app `.env` files are used for secrets. All secrets come from 1Password `op://` refs in `docker-compose.yml` (vault: `Discord Bot`; items: `Discofrybot Secrets`, `Tickets Dash Secrets`) and are resolved **at runtime inside the container**.
 - Low-sensitivity IDs/maps/avatars and public build-time values (e.g., `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) live in `/etc/discofrybot/.1p.env` (template at repo root). Keep it `chmod 600` and load via `--env-file /etc/discofrybot/.1p.env`.
 - `OP_SERVICE_ACCOUNT_TOKEN` is provided via a Docker secret file at `/etc/opt/discofrybot/op_service_account_token` (chmod 600, root-owned). Compose mounts it as `op_service_account_token`, and the container entrypoint validates ownership/perms (root:app 0400/0440) before running `op run`.
-<!-- Reason: document MongoDB TLS CA configuration for the dashboard devices APIs. -->
-- `MONGO_CA_CERT_PATH` should point to the MongoDB CA bundle on the host (default `/etc/ssl/mongo/mongo-ca.crt`) and is mounted into the `fry-dashboard` container at the same path for TLS validation.
+<!-- Reason: document MongoDB TLS CA configuration shared by dashboard APIs and FLXtime AEM issuance in the bot. -->
+- `MONGO_CA_CERT_PATH` should point to the MongoDB CA bundle on the host (default `/etc/ssl/mongo/mongo-ca.crt`) and is mounted into both `fry-dashboard` and `discofrybot` containers at the same path for TLS validation.
   - Ensure host log directories mounted into `/app/logs` are writable by uid/gid 1001.
 - Preferred run:  
   `docker compose --env-file /etc/discofrybot/.1p.env build`  
@@ -197,8 +197,12 @@ docker-compose logs -f discofrybot
 - Staff workload distribution analysis  
 - User engagement and satisfaction metrics
 - Conversion system performance monitoring
-<!-- Reason: document log redaction behavior introduced in shared loggers. -->
-- Runtime loggers redact sensitive keys from metadata before persistence
+<!-- Reason: document current log hardening behavior for runtime and persisted bot logs. -->
+- Runtime loggers redact sensitive keys and sanitize sensitive string values (keys, wallet-like addresses, emails) before persistence.
+- High-volume handlers now log message/ticket summaries instead of raw payload dumps to reduce sensitive-data exposure in Docker/stdout logs.
+<!-- Reason: document current runtime log routing behavior for operations and incident response. -->
+- Full runtime logs are written to `/app/logs/discofrybot-YYYY-MM-DD.log` (host-mounted `discofrybot/logs`), while console output defaults to `warn`/`error`.
+- Optional logger env controls: `CONSOLE_LOG_LEVEL` (default `warn`), `FILE_LOG_LEVEL` (default `debug`), `LOG_DIR` (default `/app/logs`).
 
 ---
 
