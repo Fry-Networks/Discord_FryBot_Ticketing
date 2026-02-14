@@ -133,6 +133,8 @@ services:
       - --
     volumes:
       - /home/helpdesk/discofrybot/discofrybot/logs:/app/logs # Persist logs outside container
+      # Reason: provide MongoDB CA bundle for FLXtime AEM key issuance TLS validation.
+      - ${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}:${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}:ro
     networks:
       - frynet
     # Reason: align runtime UID/GID with other repos (non-root 1001).
