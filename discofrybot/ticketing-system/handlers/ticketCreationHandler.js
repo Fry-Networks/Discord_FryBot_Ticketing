@@ -77,46 +77,93 @@ async function handleTicketModalSubmit(interaction, ticketType) {
             });
         }
 
-        // 4. Ensure target category exists and has capacity before inserting ticket
-        const categoryId = config.categoryIds[ticketType];
-        if (!categoryId) {
-            logger.error(`Misconfiguration: No categoryId found for ticketType ${ticketType}. Ticket creation aborted for user ${user.id}.`);
-            return interaction.editReply({ content: '⚠️ Ticket system error: Category not found. Ticket could not be created. Please contact support.', flags: MessageFlags.Ephemeral });
+        // --- OVERFLOW CATEGORY SUPPORT ---
+        // 4. Find available category with overflow support
+        // Try primary category first. If full, look for existing overflow categories
+        // (named "<OriginalName> 2", "<OriginalName> 3", etc.). If all full, create new one.
+
+        const primaryCategoryId = config.categoryIds[ticketType];
+        if (!primaryCategoryId) {
+            logger.error(`No category configured for ticket type: ${ticketType}`);
+            return interaction.editReply({
+                content: '❌ This ticket type is not configured. Please contact a moderator.',
+                flags: MessageFlags.Ephemeral
+            });
         }
 
-        const categoryChannel = guild.channels.cache.get(categoryId);
-        if (!categoryChannel || categoryChannel.type !== ChannelType.GuildCategory) {
-            logger.error(`Configured category ${categoryId} is missing or not a category. Ticket creation aborted for user ${user.id}.`);
-            return interaction.editReply({ content: '⚠️ Ticket system error: Ticket category is unavailable. Please contact support.', flags: MessageFlags.Ephemeral });
+        const primaryCategory = guild.channels.cache.get(primaryCategoryId);
+        if (!primaryCategory || primaryCategory.type !== ChannelType.GuildCategory) {
+            logger.error(`Primary category ${primaryCategoryId} not found or is not a category for ${ticketType}`);
+            return interaction.editReply({
+                content: '❌ Ticket category not found. Please contact a moderator.',
+                flags: MessageFlags.Ephemeral
+            });
         }
 
-        const notifyCategoryFull = async (context) => {
-            if (!config.logChannelId) {
-                logger.error(`LOG_CHANNEL_ID is not configured; cannot notify admins about category capacity. Context: ${context}`);
-                return;
+        let categoryId = null;
+        let categoryChannel = null;
+        const primaryName = primaryCategory.name;
+
+        // Build list: primary + existing overflow categories (by name pattern)
+        const categoriesToCheck = [primaryCategory];
+        const overflowCategories = guild.channels.cache.filter(
+            ch => ch.type === ChannelType.GuildCategory
+                && ch.name.startsWith(primaryName + ' ')
+                && /^\d+$/.test(ch.name.slice(primaryName.length + 1))
+        ).sort((a, b) => {
+            const numA = parseInt(a.name.slice(primaryName.length + 1), 10);
+            const numB = parseInt(b.name.slice(primaryName.length + 1), 10);
+            return numA - numB;
+        });
+        overflowCategories.forEach(cat => categoriesToCheck.push(cat));
+
+        // Check each category for capacity
+        for (const candidateCategory of categoriesToCheck) {
+            const channelsInCategory = guild.channels.cache.filter(
+                channel => channel.parentId === candidateCategory.id
+            ).size;
+            if (channelsInCategory < MAX_CHANNELS_PER_CATEGORY) {
+                categoryId = candidateCategory.id;
+                categoryChannel = candidateCategory;
+                logger.info(`Using category "${candidateCategory.name}" (${candidateCategory.id}) — ${channelsInCategory}/${MAX_CHANNELS_PER_CATEGORY} channels — for ${ticketType} ticket.`);
+                break;
+            } else {
+                logger.info(`Category "${candidateCategory.name}" (${candidateCategory.id}) is full (${channelsInCategory}/${MAX_CHANNELS_PER_CATEGORY} channels).`);
             }
+        }
+
+        // If all full, create new overflow category
+        if (!categoryId || !categoryChannel) {
+            const nextNumber = categoriesToCheck.length + 1;
+            const newCategoryName = `${primaryName} ${nextNumber}`;
+            logger.info(`All ${categoriesToCheck.length} categories for ${ticketType} are full. Creating overflow category "${newCategoryName}"...`);
 
             try {
-                const existingChannel = guild.channels.cache.get(config.logChannelId);
-                const logChannel = existingChannel || await interaction.client.channels.fetch(config.logChannelId).catch(() => null);
-
-                if (!logChannel || typeof logChannel.isTextBased !== 'function' || !logChannel.isTextBased()) {
-                    logger.error(`Log channel ${config.logChannelId} is unavailable or not text-based. Context: ${context}`);
-                    return;
-                }
-
-                await logChannel.send(`⚠️ <@&${config.ticketAdminRoleId}> Ticket category **${categoryChannel.name}** (${categoryId}) is full. Latest request from <@${user.id}> (${user.tag}) could not be opened.`);
-            } catch (notifyError) {
-                logger.error(`Failed to notify admins about full category ${categoryId}: ${notifyError.message}`, notifyError);
+                const newCategory = await guild.channels.create({
+                    name: newCategoryName,
+                    type: ChannelType.GuildCategory,
+                    permissionOverwrites: primaryCategory.permissionOverwrites.cache.map(overwrite => ({
+                        id: overwrite.id,
+                        allow: overwrite.allow,
+                        deny: overwrite.deny,
+                        type: overwrite.type,
+                    })),
+                    position: primaryCategory.position + 1,
+                    reason: `Auto-created overflow category for ${ticketType} tickets (primary category full)`,
+                });
+                categoryId = newCategory.id;
+                categoryChannel = newCategory;
+                logger.info(`Created overflow category "${newCategoryName}" (${newCategory.id}) for ${ticketType} tickets.`);
+            } catch (err) {
+                logger.error(`Failed to create overflow category "${newCategoryName}": ${err.message}`);
+                return interaction.editReply({
+                    content: '⚠️ Ticket queue is currently full and overflow could not be created. Please ping a moderator — the team has been notified in logs.',
+                    flags: MessageFlags.Ephemeral
+                });
             }
-        };
-
-        const channelsInCategory = guild.channels.cache.filter(channel => channel.parentId === categoryId).size;
-        if (channelsInCategory >= MAX_CHANNELS_PER_CATEGORY) {
-            logger.warn(`Category ${categoryId} is at capacity (${channelsInCategory} channels). Cannot create ticket for user ${user.id}.`);
-            await notifyCategoryFull('pre-check');
-            return interaction.editReply({ content: '⚠️ Ticket queue is currently full. Please try again soon or ping a moderator — the team has been notified in logs.', flags: MessageFlags.Ephemeral });
         }
+        // --- END OVERFLOW CATEGORY SUPPORT ---
+
 
         // 5. Prepare and insert ticket into Supabase with "creating" status
         const ticketRecord = {
