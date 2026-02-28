@@ -81,7 +81,8 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers
-    ]
+    ],
+    rest: { timeout: 10_000 }
 });
 // Ticket system integration
 //const { registerTicketCommands, setupTicketPanel } = require('./ticketSystem');
@@ -483,16 +484,16 @@ client.once(Events.ClientReady, async () => {
     initializeTicketSystem(client, prefix);
     logger.info('🔧 Ticket system initialized.');
         
-    // Start Flxtime reminder system (check every 6 hours)
-    setInterval(async () => {
-        try {
-            await checkFlxtimeReminders(client);
-        } catch (error) {
-            logger.error(`Error in Flxtime reminder check: ${error.message}`, error);
-        }
-    }, 6 * 60 * 60 * 1000); // 6 hours in milliseconds
-    
-    logger.info('⏰ Flxtime reminder system started (checking every 6 hours).');
+    // TODO: checkFlxtimeReminders function not found anywhere in codebase — disabled to prevent ReferenceError
+    // setInterval(async () => {
+    //     try {
+    //         await checkFlxtimeReminders(client);
+    //     } catch (error) {
+    //         logger.error(`Error in Flxtime reminder check: ${error.message}`, error);
+    //     }
+    // }, 6 * 60 * 60 * 1000); // 6 hours in milliseconds
+
+    // logger.info('⏰ Flxtime reminder system started (checking every 6 hours).');
     
     // Fetch guild data
     const guild = client.guilds.cache.first();
