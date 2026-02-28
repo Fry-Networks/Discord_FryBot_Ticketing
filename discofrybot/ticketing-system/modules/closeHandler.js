@@ -18,7 +18,11 @@ async function handleCloseNowButton(interaction, ticketId) {
     logger.info(`[DEBUG] handleCloseNowButton received ticketId: ${ticketId}`);
     try {
         // Defer the reply immediately to prevent "Unknown interaction" errors
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        // Wrapped in Promise.race to prevent indefinite hang if Discord API stalls
+        await Promise.race([
+            interaction.deferReply({ flags: MessageFlags.Ephemeral }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('deferReply timed out after 5s')), 5000))
+        ]);
 
         if (!ticketId) {
             logger.warn(`handleCloseNowButton called with undefined ticketId for interaction ${interaction.id}. Button customId: ${interaction.customId}`);

@@ -43,7 +43,7 @@ function initializeTicketSystem(client, prefix) {
     // Add message listener to log messages in ticket channels
     client.on(Events.MessageCreate, async (message) => {
         // Ignore messages from bots
-       // if (message.author.bot) return;
+        if (message.author.bot) return;
 
         // Ignore messages that are commands
         if (message.content.startsWith(prefix)) {

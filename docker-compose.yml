@@ -137,6 +137,10 @@ services:
       - ${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}:${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}:ro
     networks:
       - frynet
+    dns:
+      - "100.100.100.100"  # Tailscale MagicDNS
+      - "1.1.1.1"          # Cloudflare DNS fallback
+      - "8.8.8.8"          # Google DNS fallback
     # Reason: align runtime UID/GID with other repos (non-root 1001).
     user: "1001:1001"
 

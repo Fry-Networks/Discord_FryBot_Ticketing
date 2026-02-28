@@ -120,3 +120,4 @@ discofrybot/tools/*
 discofrybot/discofrybot/tools/*
 discofrybot/tools/bkp/ticketSystem3-18.js
 **/discofrybot/dockrebuild.sh
+container-state-backup-*.json
