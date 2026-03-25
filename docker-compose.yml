@@ -57,6 +57,7 @@ x-discofrybot-env: &discofrybot-env
   GOOGLE_BOTLOGS_FOLDER_ID: 'op://Discord Bot/Discofrybot Secrets/GOOGLE_BOTLOGS_FOLDER_ID'
   N8N_HOOK: 'op://Discord Bot/Discofrybot Secrets/N8N_HOOK'
   LOG_LEVEL: ${LOG_LEVEL:-debug}
+  API_PORT: ${API_PORT:-3001}
 
 x-fry-dashboard-env: &fry-dashboard-env
   NODE_ENV: production
@@ -103,6 +104,7 @@ services:
     # Reason: ensure op run always receives a command even if image CMD isn't propagated.
     command: ["node", "discofrybot.js"]
     environment: *discofrybot-env
+    network_mode: host
     env_file:
       - /etc/discofrybot/.1p.env
     # Reason: provide OP token as a runtime secret so it doesn't appear in container env/inspect.
@@ -135,8 +137,6 @@ services:
       - /home/helpdesk/discofrybot/discofrybot/logs:/app/logs # Persist logs outside container
       # Reason: provide MongoDB CA bundle for FLXtime AEM key issuance TLS validation.
       - ${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}:${MONGO_CA_CERT_PATH:-/etc/ssl/mongo/mongo-ca.crt}:ro
-    networks:
-      - frynet
     # Reason: align runtime UID/GID with other repos (non-root 1001).
     user: "1001:1001"
 

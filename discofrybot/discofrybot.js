@@ -513,4 +513,81 @@ process.on('SIGINT', () => {
 });
 
 // Run the bot
+
+// === FryBot Integration API ===
+const express = require('express');
+const apiApp = express();
+apiApp.use(express.json());
+
+// Health check endpoint (no auth required) - must be BEFORE auth middleware
+apiApp.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        bot: client.user?.tag || 'not_ready', 
+        uptime: process.uptime() 
+    });
+});
+
+// Auth middleware for protected endpoints
+const FRYBOT_API_KEY = process.env.FRYBOT_API_KEY;
+apiApp.use('/api/close-ticket', authMiddleware);
+apiApp.use('/api/ticket-status', authMiddleware);
+
+function authMiddleware(req, res, next) {
+    if (!FRYBOT_API_KEY) {
+        logger.warn('[API] FRYBOT_API_KEY not configured - rejecting request');
+        return res.status(503).json({ error: 'API key not configured' });
+    }
+    const authHeader = req.headers['x-api-key'] || req.headers['authorization'];
+    if (authHeader !== FRYBOT_API_KEY && authHeader !== `Bearer ${FRYBOT_API_KEY}`) {
+        logger.warn('[API] Unauthorized request - invalid API key');
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+}
+
+// Close ticket endpoint
+apiApp.post('/api/close-ticket', async (req, res) => {
+    try {
+        const { channelId, closedBy, transcript } = req.body;
+        if (!channelId) {
+            return res.status(400).json({ error: 'channelId is required' });
+        }
+        const { closeTicketProgrammatic } = require('./ticketing-system/modules/closeHandler');
+        const result = await closeTicketProgrammatic(client, channelId, closedBy || 'FryBot', { transcript: transcript === true });
+        logger.info(`[API] close-ticket result for channel ${channelId}: ${JSON.stringify(result)}`);
+        res.json(result);
+    } catch (err) {
+        logger.error(`[API] Close ticket error: ${err.message}`, err);
+        res.status(500).json({ error: 'Internal server error', message: err.message });
+    }
+});
+
+// Ticket status endpoint
+apiApp.get('/api/ticket-status/:channelId', async (req, res) => {
+    try {
+        const { data, error } = await supabaseHandler.supabase
+            .from('tickets')
+            .select('id, status, channel_id, discord_username, ticket_type, closed_at, is_transcribed')
+            .eq('channel_id', req.params.channelId)
+            .single();
+        if (error || !data) {
+            return res.status(404).json({ error: 'Ticket not found' });
+        }
+        res.json(data);
+    } catch (err) {
+        logger.error(`[API] Ticket status error: ${err.message}`, err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Start API server — isolated error handling so it never crashes the Discord bot
+const API_PORT = process.env.API_PORT || 3001;
+apiApp.listen(API_PORT, '0.0.0.0', () => {
+    logger.info(`[API] DiscoFryBot API listening on port ${API_PORT}`);
+}).on('error', (err) => {
+    logger.error(`[API] Failed to start API server: ${err.message}`);
+    // Do NOT crash the bot if the API server fails
+});
+
 client.login(DISCORD_TOKEN);

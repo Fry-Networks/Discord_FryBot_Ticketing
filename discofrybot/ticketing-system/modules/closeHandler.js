@@ -599,6 +599,65 @@ try {
 }
 }
 
+
+/**
+ * Programmatic ticket closure for API calls (no Discord interaction required).
+ * This function allows external services (like FryBot) to close tickets via the full workflow.
+ * 
+ * @param {import('discord.js').Client} client - The Discord client instance.
+ * @param {string} channelId - The Discord channel ID of the ticket.
+ * @param {string} closedByName - Name of the service/user closing the ticket (e.g., 'FryBot').
+ * @param {object} options - Optional configuration.
+ * @param {boolean} [options.transcript=false] - Whether to generate a transcript.
+ * @returns {Promise<{success: boolean, ticketId?: string, status?: string, reason?: string}>}
+ */
+async function closeTicketProgrammatic(client, channelId, closedByName = 'API', options = {}) {
+    const generateTranscript = options.transcript === true;
+    const transcriptPreference = generateTranscript ? 'post' : 'none';
+    
+    logger.info(`[API] closeTicketProgrammatic called for channel ${channelId} by ${closedByName}, transcript=${generateTranscript}`);
+    
+    try {
+        // Look up ticket by channel_id
+        const ticket = await supabaseHandler.getTicketByChannelId(channelId);
+        
+        if (!ticket) {
+            logger.warn(`[API] Ticket not found for channel ${channelId}`);
+            return { success: false, reason: 'not_found' };
+        }
+        
+        // Check if already closed
+        if (ticket.status === 'closed') {
+            logger.info(`[API] Ticket ${ticket.id} is already closed`);
+            return { success: false, reason: 'already_closed', ticketId: ticket.id };
+        }
+        
+        const ticketId = ticket.id;
+        const userId = ticket.user_id || 'frybot-api';
+        
+        logger.info(`[API] Processing closure for ticket ${ticketId} (channel ${channelId})`);
+        
+        // Call the existing processTranscriptPreference with null interaction
+        // This handles: transcript generation, DB update, channel rename/move, deletion scheduling
+        await processTranscriptPreference(
+            client,
+            ticketId,
+            channelId,
+            'frybot-api',           // userId for DB
+            closedByName,           // username for DB
+            transcriptPreference,   // 'none' or 'post'
+            null                    // No interaction object
+        );
+        
+        logger.info(`[API] Successfully closed ticket ${ticketId} via programmatic API`);
+        return { success: true, ticketId, status: 'closed' };
+        
+    } catch (error) {
+        logger.error(`[API] Error in closeTicketProgrammatic for channel ${channelId}: ${error.message}`, error);
+        return { success: false, reason: error.message };
+    }
+}
+
 module.exports = {
     handleCloseNowButton,
     processTranscriptPreference, // Export the new function
@@ -606,4 +665,5 @@ module.exports = {
     scheduleTicketDeletion, // Export for use in scheduleHandler
     handleConclusionPromptButtons, // Export the conclusion prompt handler
     finalizeScheduledTicketClosure, // Export the new function for background process
+    closeTicketProgrammatic, // Export for API-based ticket closure
 };
