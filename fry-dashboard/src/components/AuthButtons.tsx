@@ -1,21 +1,24 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../utils/supabaseClient'
 import { useRouter } from 'next/navigation'
 import type { Session } from '@supabase/supabase-js'
 
+const AUTH_LOCK_MS = 12000
+
 export default function AuthButtons() {
   const [session, setSession] = useState<Session | null>(null)
+  const [isAuthInFlight, setIsAuthInFlight] = useState(false)
   const router = useRouter()
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    // Use onAuthStateChange for initial session and updates - this is the recommended approach
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       setSession(newSession)
-      
+
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         router.refresh()
       }
@@ -26,11 +29,27 @@ export default function AuthButtons() {
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current)
+      }
+    }
   }, [router])
 
   const handleLogin = async () => {
+    if (isAuthInFlight) {
+      await log('warn', 'Login blocked: auth already in flight')
+      return
+    }
+    setIsAuthInFlight(true)
     await log('info', 'Login button clicked')
+
+    lockTimerRef.current = setTimeout(() => {
+      setIsAuthInFlight(false)
+      lockTimerRef.current = null
+    }, AUTH_LOCK_MS)
+
     await supabase.auth.signInWithOAuth({
       provider: 'discord',
       options: {
@@ -52,15 +71,19 @@ export default function AuthButtons() {
           Logout
         </button>
       ) : (
-        <button onClick={handleLogin} className="bg-green-600 text-white px-4 py-2 rounded">
-          Login with Discord
+        <button
+          onClick={handleLogin}
+          disabled={isAuthInFlight}
+          aria-disabled={isAuthInFlight}
+          className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {isAuthInFlight ? 'Redirecting to Discord...' : 'Login with Discord'}
         </button>
       )}
     </div>
   )
 }
 
-// moved outside component
 const storeDiscordTokens = async (session: Session) => {
   const { provider_token, provider_refresh_token, expires_in } = session
 
