@@ -5,6 +5,7 @@ const driveUploader = require('../utils/driveUploader'); // To be imported
 const supabaseHandler = require('../handlers/supabaseHandler'); // To be imported
 const { ModalBuilder, TextInputStyle, TextInputBuilder, ActionRowBuilder, ButtonStyle, ButtonBuilder, MessageFlags } = require('discord.js');
 const config = require('../utils/config');
+const { resolveCategoryWithOverflow } = require('../utils/categoryOverflow');
 
 // Map to store auto-delete timeouts, keyed by channel ID
 const autoDeleteTimeouts = new Map();
@@ -184,10 +185,22 @@ async function processTranscriptPreference(client, ticketId, channelId, userId, 
             if (channel && channel.manageable) {
                 // Assuming a 'closedTicketsCategoryId' exists in config
                 if (config.closedTicketsCategoryId) {
-                    await channel.setParent(config.closedTicketsCategoryId, { lockPermissions: false }); // Move to closed category
+                    // Resolve with overflow support (same logic as ticket creation, see
+                    // ticketing-system/utils/categoryOverflow.js) so a full closed-tickets
+                    // category doesn't break ticket closing. Falls back to the plain
+                    // configured id if resolution itself errors, so closing never blocks
+                    // on this new logic.
+                    let targetCategoryId = config.closedTicketsCategoryId;
+                    try {
+                        const resolvedCategory = await resolveCategoryWithOverflow(channel.guild, config.closedTicketsCategoryId, 'closed_tickets');
+                        targetCategoryId = resolvedCategory.id;
+                    } catch (err) {
+                        logger.error(`[Overflow] Failed to resolve closed-tickets category, falling back to configured id ${config.closedTicketsCategoryId}: ${err.message}`);
+                    }
+                    await channel.setParent(targetCategoryId, { lockPermissions: false }); // Move to closed category
                     // Rename channel, e.g., add a prefix
                     await channel.setName(`closed-${ticketId}-${userDiscordUsername}`); // Use discord_username from ticket data
-                    logger.info(`Moved ticket channel ${channel.id} to closed category ${config.closedTicketsCategoryId} and renamed to closed-${ticketId}-${userDiscordUsername}`);
+                    logger.info(`Moved ticket channel ${channel.id} to closed category ${targetCategoryId} and renamed to closed-${ticketId}-${userDiscordUsername}`);
 
                  // Send confirmation message and transcript based on preference
                  const confirmationMessage = "Please download and open this HTML file in any browser to view your ticket transcript. We also keep a copy of the transcript on file if you ever need it.";
