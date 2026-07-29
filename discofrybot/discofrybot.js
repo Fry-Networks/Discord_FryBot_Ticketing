@@ -7,6 +7,7 @@ const { extractAndValidateUrls, normalizeMessage } = require('./messageFilter');
 const config = require('./ticketing-system/utils/config'); // Add this import
 const { handlePrefixCommand } = require('./ticketing-system/commands/customCommands'); // Import the prefix command handler
 const { summarizeMessageContent } = require('./ticketing-system/utils/logSanitizer');
+const { initializeGovernance, mountGovernanceRoutes } = require('./governance');
 
 // Configuration from .env
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -482,6 +483,10 @@ client.once(Events.ClientReady, async () => {
     const prefix = '!'; // Define the command prefix
     initializeTicketSystem(client, prefix);
     logger.info('🔧 Ticket system initialized.');
+    
+    // Initialize governance module
+    initializeGovernance(client);
+    logger.info('[Governance] Module initialized.');
         
     // Start Flxtime reminder system (check every 6 hours)
     setInterval(async () => {
@@ -581,6 +586,9 @@ apiApp.get('/api/ticket-status/:channelId', async (req, res) => {
     }
 });
 
+// Mount governance API routes
+mountGovernanceRoutes(apiApp);
+
 // Start API server — isolated error handling so it never crashes the Discord bot
 const API_PORT = process.env.API_PORT || 3001;
 apiApp.listen(API_PORT, '0.0.0.0', () => {
@@ -590,4 +598,7 @@ apiApp.listen(API_PORT, '0.0.0.0', () => {
     // Do NOT crash the bot if the API server fails
 });
 
-client.login(DISCORD_TOKEN);
+// Reason: a bare login() rejection is unhandled and exits the process; each restart re-runs
+// `op run`, which exhausted the shared 1Password service-account quota (44,941 restarts).
+const { loginWithBackoff } = require('./lib/loginWithBackoff');
+loginWithBackoff(client, DISCORD_TOKEN, { logger });
