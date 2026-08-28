@@ -121,3 +121,20 @@ discofrybot/discofrybot/tools/*
 discofrybot/tools/bkp/ticketSystem3-18.js
 **/discofrybot/dockrebuild.sh
 container-state-backup-*.json
+
+# open-source hygiene
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+id_ed25519
+.npmrc
+.netrc
+*.tfstate
+*.tfstate.*
+kubeconfig
+serviceAccount*.json
+secrets.json
+*.sqlite3
+*.db
